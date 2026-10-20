@@ -1,0 +1,63 @@
+{
+  "name": "@lalba-anthony/git-companion",
+  "version": "1.0.0",
+  "description": "A companion tool for managing Git repositories efficiently.",
+  "keywords": [
+    "cli",
+    "git"
+  ],
+  "type": "module",
+  "bin": {
+    "git-companion": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "MIT",
+  "author": "Anthony Lalba",
+  "homepage": "https://github.com/LalbaAnthony/git-companion#readme",
+  "bugs": {
+    "url": "https://github.com/LalbaAnthony/git-companion/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LalbaAnthony/git-companion.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit --declaration false --declarationMap false",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "semantic-release": "^25.0.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.10"
+  }
+}
