@@ -78,7 +78,7 @@ export class Cli {
   }
 
   questionConfirm(message: string, style: Style = 'white'): Promise<boolean> {
-    // No by default, like inquirer.Confirm in Python
+    // No by default
     return this.#prompt((context) =>
       confirm(
         { message: this.#style(message, style), default: false },

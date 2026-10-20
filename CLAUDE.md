@@ -10,7 +10,7 @@ The file layout and overall structure are intentional and must be kept. Extend i
 
 ## Status
 
-- One function is implemented: `crawl`, ported from the user's Python script `git_sync_repos.py` (see [crawl decisions](#crawl-decisions)).
+- One function is implemented: `crawl` (see [crawl decisions](#crawl-decisions)).
 - The number of functions will grow, and every function has its own, different options.
 
 ## Commands
@@ -103,13 +103,15 @@ Rules for a command:
 
 ## crawl decisions
 
-The user insisted that crawl keeps the behavior of the Python script, odd parts included. Every deviation below was decided by the user; do not "fix" the rest without asking. `docs/usage.md` describes the resulting behavior in full.
+Every point below was decided by the user, including the ones that look odd; they are essential to the user's way of working. Do not change any of them without asking. `docs/usage.md` describes the resulting behavior in full.
 
-- `repos_to_scan` became `-r/--repo` (repeatable), `folders_to_crawl` became `-f/--folder <depth:path>` (repeatable, prefix required). `recursive` + `max_depth` were merged into one depth (`recursive: False` was equivalent to depth 0). No defaults; at least one of the two is required. The default commit message became `-m/--default-message`, default `feat: various updates`.
-- The Python `desktop_dir()` (XDG desktop lookup) is gone: folders come from the command line.
-- The Python `cli` class became `Cli` in `src/utils/cli.ts`, shared by every function, with all its methods (`print`, `clear`, `questionText`, `questionList`, `questionConfirm`, which defaults to no like Python).
-- Kept from Python: only a `.git` directory counts; the `.nogitautomation` opt-out; case-insensitive sort; a repository among the children stops the descent; the `git_pull()` call in the push loop, guarded so that it never pulls in practice; the exact messages and blank lines; `skip` and the empty answer; a failing `git status` counts as dirty.
-- Changed by the user: the crawled folder itself is added when it is a repository and its children are still explored; `.git` directories are never explored; repositories are deduplicated by real path (first occurrence wins); a clean repository ahead of its upstream is pushed without a question; a branch without upstream is pushed with `git push -u origin <branch>` (a repository without `origin` fails on every run); a detached HEAD fails without a question; without a terminal, a repository needing a commit message fails; failures of pull/add/commit/push are reported (`<step> failed in <name>.`) and the run ends with `<N> repo(s) failed : <names>` and exit code 1, while `git status -sb` and `git diff --shortstat` stay informational; Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130; colors follow the terminal; `~` is expanded.
+- Options: `-r/--repo <path>` and `-f/--folder <depth:path>` are repeatable and have no default; at least one of them is required. The depth prefix of `--folder` is mandatory, and a single depth per folder replaces any recursive flag (0 = direct children only). `-m/--default-message` defaults to `feat: various updates`.
+- `Cli` (`src/utils/cli.ts`) is the terminal utility of the whole repository, not of crawl only, with `print`, `clear`, `questionText`, `questionList` and `questionConfirm` (which defaults to no).
+- Discovery: only a `.git` directory counts (worktrees and submodules are ignored); the crawled folder itself is added when it is a repository and its children are still explored; children are sorted case-insensitively; a repository among the children stops the descent; `.git` directories are never explored; a missing or unreadable folder, and a `--repo` path that is not a repository, are ignored silently; repositories are deduplicated by real path, first occurrence wins.
+- Classification: a `.nogitautomation` file opts a repository out; a failing `git status` counts as dirty; a clean repository ahead of its upstream, or without upstream (detached HEAD included), goes to the push list.
+- Push loop: the guarded pull call that never pulls in practice is intentional; a detached HEAD fails without a question; without a terminal, a repository needing a commit message fails; `skip` leaves the repository untouched and an empty answer uses the default message; a clean repository is pushed without a question; a branch without upstream is pushed with `git push -u origin <branch>`, so a repository without `origin` fails on every run.
+- Failures of pull/add/commit/push are reported as `<step> failed in <name>.` and the run goes on; it ends with `<N> repo(s) failed : <names>` and exit code 1. `git status -sb` and `git diff --shortstat` are informational only.
+- Output: the exact messages and blank lines are part of the contract, including the space before the colons. Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130. Colors follow the terminal, and a leading `~` is expanded.
 
 ## Git and release
 

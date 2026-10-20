@@ -1,7 +1,7 @@
 import { stat } from 'node:fs/promises';
 
 // These helpers follow symbolic links and answer false on any error (missing
-// entry, permission denied...), like os.path.exists/isdir/isfile in Python
+// entry, permission denied...)
 
 export async function pathExists(target: string): Promise<boolean> {
   try {

@@ -191,8 +191,8 @@ async function pushRepo(
   const branch = await repo.currentBranch();
   cli.print(`Branch: ${branch}`, 'info');
 
-  // Kept from the original script: the repository still needs a push, so in
-  // practice nothing is pulled here
+  // Intentional: the repository still needs a push, so in practice nothing is
+  // pulled here
   const pullExitCode = await pullUnlessPushNeeded(repo);
   if (pullExitCode !== undefined && pullExitCode !== 0) {
     return reportFailure(cli, 'git pull', repo);
