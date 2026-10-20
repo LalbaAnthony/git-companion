@@ -13,6 +13,16 @@ npx @lalba-anthony/git-companion <function> --help
 
 Global flags, accepted only without a function: `-h, --help`, `-v, --version`.
 
+| Function | Purpose                                                                        |
+| -------- | ------------------------------------------------------------------------------ |
+| `crawl`  | Find Git repositories, commit and push the ones that need it, pull the others. |
+
+```sh
+npx @lalba-anthony/git-companion crawl -r ~/.claude -f 0:~/projects -f 2:~/Desktop/Projets
+```
+
+Requires Node.js `^22.13.0 || >=23.5.0` and `git` in the `PATH`.
+
 ## Documentation
 
 - [Usage](docs/usage.md) -- functions, argument rules, flags, exit codes, environment variables

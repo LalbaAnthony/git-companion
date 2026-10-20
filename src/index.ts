@@ -70,12 +70,29 @@ function parseGlobalArguments(argv: readonly string[]): CliArguments {
 function toParseArgsOptions(options: OptionSpecs): ParseArgsOptionsConfig {
   const config: ParseArgsOptionsConfig = {};
   for (const [name, spec] of Object.entries(options)) {
+    const multiple = spec.type === 'string' && spec.multiple === true;
     config[name] =
       spec.short === undefined
-        ? { type: spec.type }
-        : { type: spec.type, short: spec.short };
+        ? { type: spec.type, multiple }
+        : { type: spec.type, multiple, short: spec.short };
   }
   return config;
+}
+
+function readOptionValue(
+  spec: OptionSpec,
+  value: string | boolean | (string | boolean)[] | undefined,
+): string | boolean | readonly string[] | undefined {
+  if (spec.type === 'boolean') {
+    return value === true;
+  }
+  if (spec.multiple === true) {
+    // Tokens were validated, so every collected value is a string
+    return Array.isArray(value)
+      ? value.filter((item) => typeof item === 'string')
+      : [];
+  }
+  return typeof value === 'string' ? value : spec.default;
 }
 
 function assertOptionValue(
@@ -160,15 +177,10 @@ function parseCommandArguments(
     return { kind: 'help', command };
   }
 
-  const options: Record<string, string | boolean | undefined> = {};
+  const options: Record<string, string | boolean | readonly string[] | undefined> =
+    {};
   for (const [name, spec] of Object.entries(command.options)) {
-    const value = parsed.values[name];
-    options[name] =
-      spec.type === 'boolean'
-        ? value === true
-        : typeof value === 'string'
-          ? value
-          : spec.default;
+    options[name] = readOptionValue(spec, parsed.values[name]);
   }
 
   return {

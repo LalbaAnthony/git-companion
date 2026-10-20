@@ -30,7 +30,7 @@ describe('formatGeneralUsage', () => {
 });
 
 describe('formatCommandUsage', () => {
-  it('lists the options with their value, default and the help flag', () => {
+  it('lists the options with their value, default, repeatability and the help flag', () => {
     expect(formatCommandUsage(createAlpha())).toBe(
       [
         'Usage:',
@@ -42,6 +42,7 @@ describe('formatCommandUsage', () => {
         '  -r, --root <path>   Root directory',
         '      --depth <n>     Maximum depth (default: 3)',
         '  -q, --quiet         Less output',
+        '  -t, --tag <name>    Tag to apply (repeatable)',
         '  -h, --help          Show this help and exit',
       ].join('\n'),
     );

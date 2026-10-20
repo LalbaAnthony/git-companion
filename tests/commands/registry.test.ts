@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commands } from '../src/commands/index.js';
+import { commands } from '../../src/commands/index.js';
 
 // Invariants every registered function must respect; they cannot be expressed
 // in the Command type, so they are enforced here

@@ -1,5 +1,7 @@
 const failureExitCode = 1;
 const usageExitCode = 2;
+// 128 + SIGINT: the shell convention for a command stopped by Ctrl+C
+const interruptedExitCode = 130;
 
 export class GCError extends Error {
   readonly exitCode: number;
@@ -26,5 +28,21 @@ export class CommandError extends GCError {
   constructor(message: string, options?: ErrorOptions) {
     super(message, failureExitCode, options);
     this.name = 'CommandError';
+  }
+}
+
+// The command already explained the failure on its own output: only the exit
+// code remains to be set, nothing else is printed
+export class AlreadyReportedError extends GCError {
+  constructor() {
+    super('failure already reported', failureExitCode);
+    this.name = 'AlreadyReportedError';
+  }
+}
+
+export class InterruptedError extends GCError {
+  constructor(options?: ErrorOptions) {
+    super('interrupted by the user', interruptedExitCode, options);
+    this.name = 'InterruptedError';
   }
 }

@@ -75,7 +75,13 @@ describe('parseCliArguments: function arguments', () => {
     expect(parse(['alpha'])).toEqual({
       kind: 'run',
       command: alpha,
-      options: { root: undefined, depth: '3', quiet: false },
+      options: { root: undefined, depth: '3', quiet: false, tag: [] },
+    });
+  });
+
+  it('collects every occurrence of a repeatable option in order', () => {
+    expect(parse(['alpha', '-t', 'a', '--tag', 'b', '--tag=c'])).toMatchObject({
+      options: { tag: ['a', 'b', 'c'] },
     });
   });
 
@@ -139,6 +145,8 @@ describe('parseCliArguments: function arguments', () => {
       "option '--root' requires a value (use '--root=-q' for a value starting with '-')",
     ],
     [['alpha', '--quiet=yes'], "option '--quiet' does not take a value"],
+    [['alpha', '--tag'], "option '--tag' requires a value"],
+    [['alpha', '-t', 'a', '--tag'], "option '--tag' requires a value"],
     [['alpha', '--help=yes'], "option '--help' does not take a value"],
   ])('rejects %j', (argv, message) => {
     const error = usageErrorOf(argv);

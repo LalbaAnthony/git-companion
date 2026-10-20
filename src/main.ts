@@ -1,7 +1,12 @@
-import { GCError, UsageError } from './errors.js';
+import {
+  AlreadyReportedError,
+  GCError,
+  InterruptedError,
+  UsageError,
+} from './errors.js';
 import { formatCommandUsage, formatGeneralUsage } from './help.js';
 import { parseCliArguments } from './index.js';
-import type { Command, CommandContext, OutputStream } from './types/command.js';
+import type { Command, CommandContext } from './types/command.js';
 import { readPackageVersion } from './version.js';
 
 const successExitCode = 0;
@@ -15,7 +20,7 @@ export interface MainOptions {
   readonly debug: boolean;
 }
 
-function writeLine(stream: OutputStream, text: string): void {
+function writeLine(stream: NodeJS.WritableStream, text: string): void {
   stream.write(`${text}\n`);
 }
 
@@ -28,39 +33,75 @@ function usageFor(error: UsageError, registry: readonly Command[]): string {
     : formatCommandUsage(command);
 }
 
-async function run(
-  argv: readonly string[],
-  registry: readonly Command[],
-  context: CommandContext,
+// Settles with the task, or rejects as soon as the user interrupts it, even
+// when the task itself does not watch the signal
+async function untilInterrupted(
+  task: Promise<void>,
+  signal: AbortSignal,
 ): Promise<void> {
-  const args = parseCliArguments(argv, registry);
+  let onAbort: (() => void) | undefined;
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      reject(new InterruptedError());
+    };
+    if (signal.aborted) {
+      onAbort();
+    } else {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 
-  switch (args.kind) {
-    case 'help':
-      writeLine(
-        context.stdout,
-        args.command === undefined
-          ? formatGeneralUsage(registry)
-          : formatCommandUsage(args.command),
-      );
-      return;
-    case 'version':
-      writeLine(context.stdout, readPackageVersion());
-      return;
-    case 'run':
-      await args.command.run(args.options, context);
-      return;
+  try {
+    await Promise.race([task, interrupted]);
+  } finally {
+    if (onAbort !== undefined) {
+      signal.removeEventListener('abort', onAbort);
+    }
   }
 }
 
 // Returns the process exit code; never throws
 export async function main(options: MainOptions): Promise<number> {
   const { argv, registry, context, debug } = options;
+  let running: Command | undefined;
 
   try {
-    await run(argv, registry, context);
-    return successExitCode;
+    const args = parseCliArguments(argv, registry);
+
+    switch (args.kind) {
+      case 'help':
+        writeLine(
+          context.stdout,
+          args.command === undefined
+            ? formatGeneralUsage(registry)
+            : formatCommandUsage(args.command),
+        );
+        return successExitCode;
+      case 'version':
+        writeLine(context.stdout, readPackageVersion());
+        return successExitCode;
+      case 'run':
+        running = args.command;
+        await untilInterrupted(
+          args.command.run(args.options, context),
+          context.signal,
+        );
+        return successExitCode;
+    }
   } catch (error) {
+    if (error instanceof InterruptedError) {
+      if (running?.onInterrupt === undefined) {
+        writeLine(context.stderr, 'Interrupted.');
+      } else {
+        running.onInterrupt(context);
+      }
+      return error.exitCode;
+    }
+
+    if (error instanceof AlreadyReportedError) {
+      return error.exitCode;
+    }
+
     const isKnownFailure = error instanceof GCError;
 
     writeLine(

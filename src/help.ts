@@ -19,6 +19,18 @@ function formatOptionLabel(name: string, spec: OptionSpec): string {
   return `${short}--${name}${value}`;
 }
 
+function formatOptionDescription(spec: OptionSpec): string {
+  if (spec.type === 'boolean') {
+    return spec.description;
+  }
+  if (spec.multiple === true) {
+    return `${spec.description} (repeatable)`;
+  }
+  return spec.default === undefined
+    ? spec.description
+    : `${spec.description} (default: ${spec.default})`;
+}
+
 export function formatGeneralUsage(registry: readonly Command[]): string {
   const functionLines =
     registry.length === 0
@@ -53,10 +65,7 @@ export function formatCommandUsage(command: Command): string {
   const optionRows: HelpRow[] = Object.entries(command.options).map(
     ([name, spec]) => ({
       label: formatOptionLabel(name, spec),
-      description:
-        spec.type === 'string' && spec.default !== undefined
-          ? `${spec.description} (default: ${spec.default})`
-          : spec.description,
+      description: formatOptionDescription(spec),
     }),
   );
   optionRows.push({
