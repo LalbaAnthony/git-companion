@@ -81,9 +81,11 @@ describe('main', () => {
   });
 
   it('reports a usage error thrown by a function', async () => {
-    const run = vi.fn(async () => {
-      throw new UsageError("option '--depth' must be an integer", 'alpha');
-    });
+    const run = vi.fn(() =>
+      Promise.reject(
+        new UsageError("option '--depth' must be an integer", 'alpha'),
+      ),
+    );
     const { exec, alpha, stderr } = setup(run);
 
     expect(await exec(['alpha', '--depth', 'x'])).toBe(2);
@@ -93,9 +95,9 @@ describe('main', () => {
   });
 
   it('reports a command failure without usage', async () => {
-    const run = vi.fn(async () => {
-      throw new CommandError('not a git repository');
-    });
+    const run = vi.fn(() =>
+      Promise.reject(new CommandError('not a git repository')),
+    );
     const { exec, stderr } = setup(run);
 
     expect(await exec(['alpha'])).toBe(1);
@@ -103,9 +105,7 @@ describe('main', () => {
   });
 
   it('hides the message of an unexpected error', async () => {
-    const run = vi.fn(async () => {
-      throw new TypeError('internal detail');
-    });
+    const run = vi.fn(() => Promise.reject(new TypeError('internal detail')));
     const { exec, stderr } = setup(run);
 
     expect(await exec(['alpha'])).toBe(1);
@@ -113,9 +113,7 @@ describe('main', () => {
   });
 
   it('prints the stack trace in debug mode', async () => {
-    const run = vi.fn(async () => {
-      throw new TypeError('internal detail');
-    });
+    const run = vi.fn(() => Promise.reject(new TypeError('internal detail')));
     const { exec, stderr } = setup(run, true);
 
     expect(await exec(['alpha'])).toBe(1);

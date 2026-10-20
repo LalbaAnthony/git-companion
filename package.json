@@ -34,11 +34,11 @@
     "url": "git+https://github.com/LalbaAnthony/git-companion.git"
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepack": "npm run build"
