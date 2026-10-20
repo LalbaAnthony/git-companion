@@ -17,12 +17,11 @@ workflow](#the-shared-verification-workflow).
 
 ## What happens on a merge to `main`
 
-1. The `verify` job calls `tests.inc.yml`: checkout, Node 22, `npm ci`,
-   `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
+1. The `verify` job calls `tests.inc.yml`: checkout, Node from `.nvmrc`, `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
 2. The `release` job waits on `verify` through `needs`, then checks out with
    `fetch-depth: 0` (semantic-release needs the full history to read the
    previous tags) and `persist-credentials: false`.
-3. Node 22 with `registry-url: https://registry.npmjs.org`.
+3. Node from `.nvmrc`, with `registry-url: https://registry.npmjs.org`.
 4. `npm ci`, `npm run build`.
 5. `npx semantic-release`.
 
@@ -73,7 +72,6 @@ The release step exports the same secret as both `NPM_TOKEN` and
 ```
 //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
 registry=https://registry.npmjs.org/
-always-auth=true
 ```
 
 `@semantic-release/npm` reads that file with `rc`, which parses INI but does not
@@ -117,7 +115,7 @@ jobs:
     uses: ./.github/workflows/tests.inc.yml
 ```
 
-It accepts one optional input, `node-version`, defaulting to `"22"`.
+It takes no input. Both `tests.inc.yml` and the `release` job read the Node version from `.nvmrc` (`node-version-file`), the single place where it is set.
 
 Two consequences of the reusable-workflow form:
 

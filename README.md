@@ -21,7 +21,7 @@ Global flags, accepted only without a function: `-h, --help`, `-v, --version`.
 npx @lalba-anthony/git-companion crawl -r ~/.claude -f 0:~/projects -f 2:~/Desktop/Projets
 ```
 
-Requires Node.js `^22.13.0 || >=23.5.0` and `git` in the `PATH`.
+Requires Node.js 24 or later and `git` in the `PATH`.
 
 ## Documentation
 

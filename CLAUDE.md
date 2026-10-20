@@ -25,12 +25,13 @@ npm run build       # tsc -p tsconfig.build.json: src/ -> dist/
 npm run dev         # build in watch mode
 ```
 
-CI (`.github/workflows/tests.inc.yml`) runs lint, typecheck, test, build on Node 22 (Ubuntu), in that order. Run the same sequence before declaring a change done.
+CI (`.github/workflows/tests.inc.yml`) runs lint, typecheck, test, build on Ubuntu with the Node version of `.nvmrc`, in that order. Run the same sequence before declaring a change done.
 
 ## Environment
 
 - Windows 11, PowerShell is the primary shell, Git Bash is available.
-- Local Node is 24.x, CI is Node 22. `engines` is `^22.13.0 || >=23.5.0`, the range of `@inquirer/prompts`: do not use Node APIs newer than 22.13.
+- Node 24 everywhere. `.nvmrc` (`24`) is the single source of the version: both workflows read it through `node-version-file`, and local version managers use it. `engines` is `>=24`. `@types/node` is kept on `^24`, so that an API newer than Node 24 fails to compile, and TypeScript targets `es2025`, which Node 24 runs entirely. Raising the floor means changing `.nvmrc`, `engines`, `@types/node` and possibly the ES target together.
+- The workflows use `actions/checkout@v7` and `actions/setup-node@v7`, which run on Node 24.
 - Inline `node -e "..."` and `rm -rf` commands are denied by the permission settings. Write probe scripts to a file in the scratchpad and run them with `node <file>` or `bash <file>`.
 - The Bash tool environment sets `FORCE_COLOR=1`, so the CLI prints colors even through a pipe there. Use `env -u FORCE_COLOR` to see the plain output.
 

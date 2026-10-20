@@ -7,7 +7,7 @@ npx @lalba-anthony/git-companion --help
 npx @lalba-anthony/git-companion --version
 ```
 
-Running the CLI without any argument prints the general help, like `--help`. Node.js `^22.13.0 || >=23.5.0` and `git` in the `PATH` are required.
+Running the CLI without any argument prints the general help, like `--help`. Node.js 24 or later and `git` in the `PATH` are required.
 
 ## Functions
 
