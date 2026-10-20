@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module';
 
-const fallbackVersion = '0.0.0-development';
+const requireFromModule = createRequire(import.meta.url);
 
-function readVersion(manifest: unknown): string {
+export function readVersion(manifest: unknown): string {
   if (
     typeof manifest === 'object' &&
     manifest !== null &&
@@ -11,11 +11,11 @@ function readVersion(manifest: unknown): string {
   ) {
     return manifest.version;
   }
-  return fallbackVersion;
+  throw new Error('package.json has no string "version" field');
 }
 
-const requireFromModule = createRequire(import.meta.url);
-
-export const packageVersion = readVersion(
-  requireFromModule('../package.json') as unknown,
-);
+// Read on demand rather than at import time, so a broken manifest is reported
+// through the CLI error handler instead of crashing the module graph
+export function readPackageVersion(): string {
+  return readVersion(requireFromModule('../package.json') as unknown);
+}

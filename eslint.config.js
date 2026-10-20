@@ -21,9 +21,6 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
-    files: ['src/**/*.ts', 'tests/**/*.ts']
-  },
-  {
     files: ['src/**/*.ts'],
     rules: {
       '@typescript-eslint/explicit-module-boundary-types': 'error',

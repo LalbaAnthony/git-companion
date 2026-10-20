@@ -1,8 +1,6 @@
 # Release
 
-Publication is fully automated by semantic-release. Nothing is ever published by
-hand, and `package.json` keeps the placeholder version `0.0.0-development` on
-disk: the real version is computed at release time from the commit history.
+Publication is fully automated by semantic-release. Nothing is ever published by hand, and the version written in `package.json` is not authoritative: the real version is computed at release time from the commit history, then committed back to `main` by `@semantic-release/git`.
 
 ## Trigger
 
@@ -141,7 +139,7 @@ level.
 npm view @lalba-anthony/git-companion version
 npm view @lalba-anthony/git-companion dist-tags
 npx @lalba-anthony/git-companion@latest --version
-npx @lalba-anthony/git-companion@latest ./README.md
+npx @lalba-anthony/git-companion@latest --help
 ```
 
 The provenance attestation is visible on the package page on npmjs.com and via:

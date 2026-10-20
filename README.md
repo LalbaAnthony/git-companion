@@ -7,15 +7,16 @@ A companion tool for managing Git repositories efficiently.
 ## Usage
 
 ```sh
-npx @lalba-anthony/git-companion crawl
+npx @lalba-anthony/git-companion <function> [options]
+npx @lalba-anthony/git-companion <function> --help
 ```
 
-Flags: `-h, --help`, `-v, --version`.
+Global flags, accepted only without a function: `-h, --help`, `-v, --version`.
 
 ## Documentation
 
-- [Usage](docs/usage.md) -- flags, exit codes, environment variables, library API
-- [Architecture](docs/architecture.md) -- module graph and design decisions
+- [Usage](docs/usage.md) -- functions, argument rules, flags, exit codes, environment variables
+- [Architecture](docs/architecture.md) -- module graph, adding a function, design decisions
 - [Git](docs/git.md) -- how to use Git with this project
 - [Release](docs/release.md) -- how publication is automated
 
