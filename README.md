@@ -25,7 +25,7 @@ Requires Node.js 24 or later and `git` in the `PATH`.
 
 ## Documentation
 
-- [Usage](docs/usage.md) -- functions, argument rules, flags, exit codes, environment variables
+- [Usage](docs/usage.md) -- running from a clone, functions, argument rules, flags, exit codes, environment variables
 - [Architecture](docs/architecture.md) -- module graph, adding a function, design decisions
 - [Git](docs/git.md) -- how to use Git with this project
 - [Release](docs/release.md) -- how publication is automated

@@ -9,6 +9,28 @@ npx @lalba-anthony/git-companion --version
 
 Running the CLI without any argument prints the general help, like `--help`. Node.js 24 or later and `git` in the `PATH` are required.
 
+## From a clone
+
+The CLI also runs from a clone of the repository, without `npx`. It still needs the dependencies that `npx` would download: TypeScript (a development dependency) for the build, and `@inquirer/prompts`, which is loaded on every run, `--help` included.
+
+```sh
+npm ci                                  # downloads the dependencies of package-lock.json
+npm run build                           # compiles src/ into dist/
+node dist/cli.js <function> [options]
+```
+
+`node dist/cli.js` replaces `npx @lalba-anthony/git-companion` in every example of this page. Once the install and the build are done, no network access is needed. `--version` prints `1.0.0`, the placeholder version kept in the repository: the published version is only set at release time.
+
+Without network access:
+
+- `npm ci --offline` installs from the npm cache only, and fails with `ENOTCACHED` when a package is missing from it. The cache has them when this project, or another one using the same versions, was installed on the machine before.
+- Otherwise, run `npm ci` and `npm run build` on a machine with network access, then copy the folder, `dist/` and `node_modules/` included. The runtime dependencies are plain JavaScript, so the copy runs on any OS. The development dependencies include platform-specific binaries: building or testing on another OS needs a new `npm ci`.
+
+To call it as `git-companion` from any directory:
+
+- `npm link`, run in the clone after the install, adds a global `git-companion` command that points to the clone, so a new `npm run build` is picked up without linking again. `npm unlink -g @lalba-anthony/git-companion` removes it.
+- Or define a shell function, for instance in the PowerShell profile: `function git-companion { node C:\path\to\git-companion\dist\cli.js @args }`.
+
 ## Functions
 
 | Function | Purpose                                                                                  |
