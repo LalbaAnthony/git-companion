@@ -10,7 +10,7 @@ The file layout and overall structure are intentional and must be kept. Extend i
 
 ## Status
 
-- One function is implemented: `crawl` (see [crawl decisions](#crawl-decisions)).
+- Two functions are implemented: `crawl` and `ignore` (see [crawl decisions](#crawl-decisions) and [ignore decisions](#ignore-decisions)).
 - The number of functions will grow, and every function has its own, different options.
 
 ## Commands
@@ -47,6 +47,7 @@ src/version.ts                readPackageVersion(), reads ../package.json on dem
 src/commands/index.ts         the registry: readonly Command[]
 src/commands/define.ts        defineCommand(): typed declaration of a function
 src/commands/crawl.ts         the crawl function
+src/commands/ignore.ts        the ignore function
 src/utils/cli.ts              Cli (print, clear, questionText/List/Confirm) and shouldUseColors()
 src/utils/process.ts          createProcessRunner(): capture() / run() of external programs
 src/utils/repo.ts             Repo: git operations on a working copy
@@ -55,7 +56,7 @@ src/types/command.ts          Command, option specs, OptionValues, CommandContex
 src/types/cli.ts              CliArguments (help | version | run)
 tests/fixtures/commands.ts    fake commands (alpha, beta-long-name), captureStream(), createContext()
 tests/fixtures/git.ts         sandbox with an isolated git config, repo/remote factories
-tests/commands/               crawl and registry tests
+tests/commands/               crawl, ignore and registry tests
 tests/utils/                  Cli and process runner tests
 ```
 
@@ -98,7 +99,7 @@ Rules for a command:
 - ESLint runs `strictTypeChecked` + `stylisticTypeChecked` on `src/` and `tests/`. In tests, mock async functions with `() => Promise.resolve()` / `() => Promise.reject(error)` rather than `async` arrows without `await` or empty bodies. Static-only classes are rejected (`no-extraneous-class`): use instances or plain functions.
 - Two tsconfigs: `tsconfig.json` (src + tests, `noEmit`, used by typecheck, the IDE and ESLint) and `tsconfig.build.json` (extends it, `rootDir: src`, `outDir: dist`, source maps). Compiler options live in `tsconfig.json`; only emit options go in the build config.
 - Tests use vitest with explicit imports from `vitest`. Test the dispatch through `main()` with `createContext()`; do not spawn the built CLI. A file that mocks a module (`vi.mock('@inquirer/prompts')`) calls `vi.clearAllMocks()` in `beforeEach`: `restoreMocks` does not reset their calls.
-- Tests that need git use `createSandbox()` from `tests/fixtures/git.ts`: it stubs `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM` and `GIT_TERMINAL_PROMPT` so that the user's git settings never apply (`unstubEnvs` is on in `vitest.config.ts`).
+- Tests that need git use `createSandbox()` from `tests/fixtures/git.ts`: it stubs `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM` and `GIT_TERMINAL_PROMPT` so that the user's git settings never apply, and `GIT_CEILING_DIRECTORIES` so that the workspace is outside of any working tree even when the temporary directory is inside one (`unstubEnvs` is on in `vitest.config.ts`).
 - Comments are sparse and explain why, not what.
 - Single runtime dependency: `@inquirer/prompts` (chosen by the user). Adding another one is a decision for the user.
 
@@ -113,6 +114,18 @@ Every point below was decided by the user, including the ones that look odd; the
 - Push loop: the guarded pull call that never pulls in practice is intentional; a detached HEAD fails without a question; without a terminal, a repository needing a commit message fails; `skip` leaves the repository untouched and an empty answer uses the default message; a clean repository is pushed without a question; a branch without upstream is pushed with `git push -u origin <branch>`, so a repository without `origin` fails on every run.
 - Failures of pull/add/commit/push are reported as `<step> failed in <name>.` and the run goes on; it ends with `<N> repo(s) failed : <names>` and exit code 1. `git status -sb` and `git diff --shortstat` are informational only.
 - Output: the exact messages and blank lines are part of the contract, including the space before the colons. Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130. Colors follow the terminal, and a leading `~` is expanded.
+
+## ignore decisions
+
+Every point below was decided by the user. Do not change any of them without asking. `docs/usage.md` describes the resulting behavior in full.
+
+- Options: `-p/--pattern <pattern>` is repeatable and at least one is required. An empty value or a value containing CR or LF is a usage error, checked before anything is written. Patterns are not trimmed.
+- Target: the `.gitignore` at `git rev-parse --show-toplevel` (linked worktrees and submodules included, unlike crawl's discovery), or in the current directory outside of a working tree. git missing from the PATH is an error (exit 1), not a fallback to the current directory.
+- A missing file is created first (`Created <file>`). A creation failure prints `Failed to create <file> (<code>)` and stops with exit 1.
+- A pattern is compared literally with whole lines, CRs ignored. When present: `'<pattern>' is already in <file>`, nothing written, exit 0.
+- Appending always uses LF, even in a CRLF file; an unterminated last line gets an LF first.
+- A read or write failure prints `Failed to write <file> (<code>)` and the next patterns are still processed; the run then ends with exit 1. An error without a system code surfaces as `unexpected error`.
+- Output: every message goes to stdout through `Cli`, styled by outcome: `Created` info, `Added` success, already present warning, failures error. No `onInterrupt`: Ctrl+C prints the generic `Interrupted.`.
 
 ## Git and release
 

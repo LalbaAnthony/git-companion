@@ -16,9 +16,11 @@ Global flags, accepted only without a function: `-h, --help`, `-v, --version`.
 | Function | Purpose                                                                        |
 | -------- | ------------------------------------------------------------------------------ |
 | `crawl`  | Find Git repositories, commit and push the ones that need it, pull the others. |
+| `ignore` | Add patterns to the `.gitignore` of the current repository.                    |
 
 ```sh
 npx @lalba-anthony/git-companion crawl -r ~/.claude -f 0:~/projects -f 2:~/Desktop/Projets
+npx @lalba-anthony/git-companion ignore -p node_modules/ -p "*.log"
 ```
 
 Requires Node.js 24 or later and `git` in the `PATH`.

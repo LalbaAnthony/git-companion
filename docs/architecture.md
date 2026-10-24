@@ -13,7 +13,7 @@ src/errors.ts              GCError and its subclasses, with their exit codes
 src/version.ts             reads the version from package.json on demand
 src/commands/index.ts      the registry: every function exposed by the CLI
 src/commands/define.ts     defineCommand(): typed declaration of a function
-src/commands/<name>.ts     one file per function (crawl.ts)
+src/commands/<name>.ts     one file per function (crawl.ts, ignore.ts)
 src/utils/cli.ts           Cli: styled output and questions; shouldUseColors()
 src/utils/process.ts       createProcessRunner(): runs external programs (git)
 src/utils/repo.ts          Repo: a Git working copy driven through the git executable

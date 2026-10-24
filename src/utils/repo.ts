@@ -30,6 +30,17 @@ export class Repo {
     return !(await isFile(path.join(this.path, '.nogitautomation')));
   }
 
+  // Root of the working tree that contains this path, linked worktrees and
+  // submodules included; undefined outside of a working tree
+  async topLevel(): Promise<string | undefined> {
+    const result = await this.#capture(['rev-parse', '--show-toplevel']);
+    if (result.exitCode !== 0) {
+      return undefined;
+    }
+    // git prints C:/x on Windows: resolve() gives the native form
+    return path.resolve(result.stdout.replace(/\r?\n$/, ''));
+  }
+
   // Empty on a detached HEAD
   async currentBranch(): Promise<string> {
     const result = await this.#capture(['branch', '--show-current']);

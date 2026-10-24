@@ -20,7 +20,9 @@ export interface Sandbox {
 }
 
 // Temporary directory with a private git configuration, so that the user's
-// settings (signing, hooks, credential helpers...) never leak into a test
+// settings (signing, hooks, credential helpers...) never leak into a test.
+// git does not look for a repository above it, so the workspace is outside of
+// any working tree even when the temporary directory is inside one.
 export async function createSandbox(): Promise<Sandbox> {
   const root = await mkdtemp(path.join(tmpdir(), 'git-companion-'));
   const workspace = path.join(root, 'workspace');
@@ -45,6 +47,7 @@ export async function createSandbox(): Promise<Sandbox> {
   vi.stubEnv('GIT_CONFIG_GLOBAL', configPath);
   vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1');
   vi.stubEnv('GIT_TERMINAL_PROMPT', '0');
+  vi.stubEnv('GIT_CEILING_DIRECTORIES', root);
 
   return {
     root,

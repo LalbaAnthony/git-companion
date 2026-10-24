@@ -36,6 +36,7 @@ To call it as `git-companion` from any directory:
 | Function | Purpose                                                                                  |
 | -------- | ---------------------------------------------------------------------------------------- |
 | `crawl`  | Find Git repositories, commit and push the ones that need it, pull the others.           |
+| `ignore` | Add patterns to the `.gitignore` of the current repository.                              |
 
 ### crawl
 
@@ -77,6 +78,25 @@ Each repository to push, in discovery order:
 Each repository to pull then runs `git pull`, unless it needed a push in the meantime.
 
 A failing `git pull`, `git add`, `git commit` or `git push` prints `<step> failed in <name>.` and moves on to the next repository. The run ends with `All repos have been successfully synced.` and exit code 0, or with `<N> repo(s) failed : <names>` and exit code 1. Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130.
+
+### ignore
+
+```sh
+npx @lalba-anthony/git-companion ignore -p node_modules/ -p "*.log"
+```
+
+| Option                      | Effect                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-p`, `--pattern <pattern>` | Line to add to the `.gitignore`. Repeatable, at least one is required. An empty value or a value containing a line break is a usage error, and nothing is written. |
+
+The file is the `.gitignore` at the root of the working tree that contains the current directory, as given by `git rev-parse --show-toplevel`: a linked worktree or a submodule uses its own root. Outside of a working tree, the `.gitignore` of the current directory is used.
+
+1. A missing file is created first, and `Created <file>` is printed. When it cannot be created, `Failed to create <file> (<code>)` is printed, `<code>` being the system error code (`EACCES`...), and the function stops with exit code 1.
+2. Each pattern, in command-line order, is compared with every line of the file: literally, as a whole line, carriage returns ignored so that a CRLF file matches too. A pattern found prints `'<pattern>' is already in <file>` and changes nothing. A pattern repeated on the command line is found on its second occurrence.
+3. Otherwise the pattern is appended, followed by an LF, even in a CRLF file. An unterminated last line is terminated with an LF first. `Added '<pattern>' to <file>` is printed.
+4. A pattern that cannot be read or written prints `Failed to write <file> (<code>)`, and the next patterns are still processed.
+
+The function ends with exit code 0 when every pattern was added or already present, 1 otherwise. Patterns are written as given: leading and trailing spaces are kept and count in the comparison. Paths are printed in the native form of the platform.
 
 ## Argument rules
 
