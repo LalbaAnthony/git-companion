@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/LalbaAnthony/git-companion/compare/v1.0.0...v1.1.0) (2026-10-24)
+
+
+### Features
+
+* **ignore:** add patterns to the .gitignore of the repository ([5da099d](https://github.com/LalbaAnthony/git-companion/commit/5da099dc81c832334b0f001eeeb0e4f899b3f838))
+
 # 1.0.0 (2026-10-20)
 
 
