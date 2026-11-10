@@ -67,16 +67,33 @@ describe('Cli questions', () => {
     );
   });
 
-  it('passes the default answer of a text question', async () => {
+  it('passes the default answer and the required flag of a text question', async () => {
     const context = createContext({ interactive: true });
     vi.mocked(input).mockResolvedValueOnce('suggested');
 
     await expect(
-      new Cli(context).questionText('Name?', 'white', 'suggested'),
+      new Cli(context).questionText('Name?', 'white', {
+        default: 'suggested',
+        required: true,
+      }),
     ).resolves.toBe('suggested');
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: 'Name?', default: 'suggested' },
+      { message: 'Name?', default: 'suggested', required: true },
       { input: context.stdin, output: context.stdout, signal: context.signal },
+    );
+  });
+
+  it('leaves out the text question options that are not set', async () => {
+    const context = createContext({ interactive: true });
+    vi.mocked(input).mockResolvedValueOnce('answer');
+
+    await new Cli(context).questionText('Name?', 'white', {
+      default: undefined,
+      required: false,
+    });
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: 'Name?' },
+      expect.anything(),
     );
   });
 

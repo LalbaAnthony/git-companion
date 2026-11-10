@@ -18,6 +18,15 @@ export const styles = {
 
 export type Style = keyof typeof styles;
 
+export interface TextQuestionOptions {
+  // Shown dimmed and returned when Enter is pressed on an empty input; Tab
+  // copies it into the input to edit it, and Backspace on an empty input
+  // discards it
+  readonly default?: string | undefined;
+  // An empty answer is refused and the question stays open
+  readonly required?: boolean;
+}
+
 interface PromptContext {
   readonly input: NodeJS.ReadableStream;
   readonly output: NodeJS.WritableStream;
@@ -61,23 +70,22 @@ export class Cli {
     this.#context.stdout.write(`${this.#style(message, style)}\n`);
   }
 
-  // A default answer is shown dimmed and returned when Enter is pressed on an
-  // empty input; Tab copies it into the input to edit it, and Backspace on an
-  // empty input discards it
   questionText(
     message: string,
     style: Style = 'white',
-    defaultAnswer?: string,
+    options: TextQuestionOptions = {},
   ): Promise<string> {
-    const styled = this.#style(message, style);
-    return this.#prompt((context) =>
-      input(
-        defaultAnswer === undefined
-          ? { message: styled }
-          : { message: styled, default: defaultAnswer },
-        context,
-      ),
-    );
+    // Only the options that are set reach inquirer
+    const config: { message: string; default?: string; required?: boolean } = {
+      message: this.#style(message, style),
+    };
+    if (options.default !== undefined) {
+      config.default = options.default;
+    }
+    if (options.required === true) {
+      config.required = true;
+    }
+    return this.#prompt((context) => input(config, context));
   }
 
   questionList(

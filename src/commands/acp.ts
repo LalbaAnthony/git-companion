@@ -46,7 +46,7 @@ async function askMessage(
       ? undefined
       : await suggestMessage(messageCommand, root, cli, context);
   const answer = (
-    await cli.questionText('Commit message', 'white', suggestion)
+    await cli.questionText('Commit message', 'white', { default: suggestion })
   ).trim();
   if (answer === '') {
     fail(cli, 'Commit message required. Aborting.');

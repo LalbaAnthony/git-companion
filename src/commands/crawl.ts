@@ -225,12 +225,13 @@ async function pushRepo(
             repo.name,
           );
 
-    // An empty answer only comes back when there is no suggestion, or when it
-    // was discarded with Backspace
+    // There is always a suggestion, and no implicit fallback: the default
+    // message is only committed when it is accepted, and an empty answer
+    // (suggestion discarded with Backspace) keeps the question open
     const answer = await cli.questionText(
       "Enter the commit message (enter 'skip' to skip)",
       'white',
-      suggestion,
+      { default: suggestion ?? settings.defaultMessage, required: true },
     );
     if (answer === 'skip') {
       cli.print(`Skipping ${repo.name}.`, 'warning');
@@ -240,8 +241,7 @@ async function pushRepo(
     if ((await repo.add()) !== 0) {
       return reportFailure(cli, 'git add', repo);
     }
-    const message = answer === '' ? settings.defaultMessage : answer;
-    if ((await repo.commit(message)) !== 0) {
+    if ((await repo.commit(answer)) !== 0) {
       return reportFailure(cli, 'git commit', repo);
     }
   }
@@ -303,7 +303,8 @@ export const crawl = defineCommand({
       short: 'm',
       valueName: 'message',
       default: 'feat: various updates',
-      description: 'Commit message used when the answer is left empty',
+      description:
+        'Commit message suggested when no message command output is available',
     },
     'message-command': {
       type: 'string',

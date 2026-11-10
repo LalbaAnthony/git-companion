@@ -20,8 +20,8 @@ export function parseMessageCommand(
 
 // Runs the message command in the repository. Resolves with its trimmed
 // output, or undefined when it exits with an error or prints nothing: the
-// question is then asked without a suggestion. The repository name, when
-// given, ends up in the warning.
+// caller then suggests its own fallback, if it has one. The repository name,
+// when given, ends up in the warning.
 export async function suggestMessage(
   messageCommand: string,
   repoPath: string,
