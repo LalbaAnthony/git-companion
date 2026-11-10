@@ -1,7 +1,11 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { CommandError, InterruptedError } from '../errors.js';
-import type { CapturedProcess, ProcessRunner } from '../types/command.js';
+import type {
+  CapturedProcess,
+  CapturedStdout,
+  ProcessRunner,
+} from '../types/command.js';
 
 // Exit status of a Windows console process stopped by Ctrl+C (STATUS_CONTROL_C_EXIT)
 const windowsCtrlCExitCode = 0xc000013a;
@@ -103,6 +107,28 @@ export function createProcessRunner(
       child.stdout.pipe(output.stdout, { end: false });
       child.stderr.pipe(output.stderr, { end: false });
       return waitForExit(child, command, signal);
+    },
+
+    async captureShell(commandLine, cwd): Promise<CapturedStdout> {
+      if (signal.aborted) {
+        throw abortReason(signal);
+      }
+      // No args array: Node.js deprecates passing arguments along with shell
+      const child = spawn(commandLine, {
+        cwd,
+        signal,
+        shell: true,
+        stdio: ['ignore', 'pipe', output === undefined ? 'inherit' : 'pipe'],
+        windowsHide: true,
+      });
+      const stdout: Buffer[] = [];
+      child.stdout?.on('data', (chunk: Buffer) => stdout.push(chunk));
+      if (output !== undefined) {
+        child.stderr?.pipe(output.stderr, { end: false });
+      }
+
+      const exitCode = await waitForExit(child, commandLine, signal);
+      return { exitCode, stdout: Buffer.concat(stdout).toString('utf8') };
     },
   };
 }

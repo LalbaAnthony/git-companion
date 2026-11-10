@@ -15,7 +15,7 @@ src/commands/index.ts      the registry: every function exposed by the CLI
 src/commands/define.ts     defineCommand(): typed declaration of a function
 src/commands/<name>.ts     one file per function (crawl.ts, ignore.ts)
 src/utils/cli.ts           Cli: styled output and questions; shouldUseColors()
-src/utils/process.ts       createProcessRunner(): runs external programs (git)
+src/utils/process.ts       createProcessRunner(): runs external programs (git, user command lines)
 src/utils/repo.ts          Repo: a Git working copy driven through the git executable
 src/utils/fs.ts            pathExists(), isDirectory(), isFile()
 src/types/command.ts       Command, option specs, CommandContext, ProcessRunner
@@ -57,9 +57,9 @@ In code, a function of the CLI is called a command, because `function` is a rese
 | `interactive` | stdin is a terminal: questions can be asked.                                                                |
 | `colors`      | ANSI styles are written to stdout: `FORCE_COLOR`, then `NO_COLOR` and `TERM=dumb`, then whether stdout is a terminal. |
 | `signal`      | Aborted with an `InterruptedError` on Ctrl+C.                                                               |
-| `runner`      | `ProcessRunner`: `capture()` collects the output of a command, `run()` lets it reach the user.             |
+| `runner`      | `ProcessRunner`: `capture()` collects the output of a command, `run()` lets it reach the user, `captureShell()` runs a command line through the system shell, collecting its stdout and letting its stderr reach the user. |
 
-In the CLI, `runner.run()` inherits the terminal, so that git keeps its colors, its progress output and its credential prompts. Tests build the runner with an `output` option instead, which forwards the child output to captured streams.
+In the CLI, `runner.run()` inherits the terminal, so that git keeps its colors, its progress output and its credential prompts; `runner.captureShell()` inherits stderr only. Tests build the runner with an `output` option instead, which forwards the child output to captured streams.
 
 ## Interruption
 
@@ -112,3 +112,4 @@ A command writes through `new Cli(context)` (or `context.stdout`), runs programs
 - `main()` is separate from `cli.ts`, so the whole dispatch, including exit codes, output streams and interruptions, is tested without spawning the CLI.
 - `readPackageVersion()` throws when `package.json` has no string `version`: a broken manifest is a packaging bug, not something to hide behind a placeholder.
 - Prompt errors are recognized by name (`ExitPromptError`, `AbortPromptError`): their classes live in `@inquirer/core`, which is not a direct dependency.
+- The crawl message command is a command line run through the system shell, not an executable with arguments: a function defined in a shell profile is not an executable, so the user picks the shell that defines it. `captureShell()` passes the line alone to `spawn` with `shell: true`, since passing arguments along with `shell` is deprecated by Node.js. The function plugged in differs per machine, so the code, the docs and the tests never name one.

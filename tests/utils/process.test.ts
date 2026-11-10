@@ -7,6 +7,11 @@ function node(script: string): [string, string[]] {
   return [process.execPath, ['-e', script]];
 }
 
+// Same script as node(), as a command line understood by cmd.exe and /bin/sh
+function nodeCommandLine(script: string): string {
+  return `"${process.execPath}" -e "${script}"`;
+}
+
 function createRunner(signal = new AbortController().signal) {
   const stdout = captureStream();
   const stderr = captureStream();
@@ -127,5 +132,59 @@ describe('createProcessRunner: run', () => {
     await expect(
       runner.run('git-companion-missing-binary', [], process.cwd()),
     ).rejects.toThrow(CommandError);
+  });
+});
+
+describe('createProcessRunner: captureShell', () => {
+  it('captures stdout decoded as UTF-8, forwards stderr and resolves with the exit code', async () => {
+    const { runner, stdout, stderr } = createRunner();
+    const commandLine = nodeCommandLine(
+      "process.stdout.write('héllo ✓'); process.stderr.write('progress'); process.exit(3)",
+    );
+
+    await expect(
+      runner.captureShell(commandLine, process.cwd()),
+    ).resolves.toEqual({ exitCode: 3, stdout: 'héllo ✓' });
+    expect(stderr.text()).toBe('progress');
+    expect(stdout.text()).toBe('');
+  });
+
+  it('lets the system shell interpret the command line', async () => {
+    const { runner } = createRunner();
+    const commandLine = `${nodeCommandLine("process.stdout.write('a')")} && ${nodeCommandLine("process.stdout.write('b')")}`;
+
+    const result = await runner.captureShell(commandLine, process.cwd());
+    expect(result).toEqual({ exitCode: 0, stdout: 'ab' });
+  });
+
+  it('runs in the given directory', async () => {
+    const { runner } = createRunner();
+    const commandLine = nodeCommandLine('process.stdout.write(process.cwd())');
+
+    const result = await runner.captureShell(commandLine, import.meta.dirname);
+    expect(result.stdout).toBe(import.meta.dirname);
+  });
+
+  it('reports a missing command through the exit code of the shell', async () => {
+    const { runner, stderr } = createRunner();
+
+    const result = await runner.captureShell(
+      'git-companion-missing-binary',
+      process.cwd(),
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toBe('');
+    expect(stderr.text()).toContain('git-companion-missing-binary');
+  });
+
+  it('does not start anything once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const reason = new InterruptedError();
+    controller.abort(reason);
+    const { runner } = createRunner(controller.signal);
+
+    await expect(
+      runner.captureShell(nodeCommandLine(''), process.cwd()),
+    ).rejects.toBe(reason);
   });
 });

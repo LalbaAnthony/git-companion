@@ -75,6 +75,21 @@ function summary(skipped: string, toPush: string, toPull: number): string {
   ].join('\n');
 }
 
+// Writes a Node.js script outside of the workspace and returns a command line
+// that runs it, valid for cmd.exe and /bin/sh
+async function messageCommand(script: string): Promise<string> {
+  const scriptPath = path.join(sandbox.root, 'message-command.mjs');
+  await writeFile(scriptPath, script);
+  return `"${process.execPath}" "${scriptPath}"`;
+}
+
+// Behaves like Enter pressed on an empty input: the default answer, if any
+function acceptSuggestion(): void {
+  vi.mocked(input).mockImplementation((config) =>
+    Promise.resolve(config.default ?? ''),
+  );
+}
+
 async function commitAndPush(repoPath: string, file: string, content: string) {
   await writeFile(path.join(repoPath, file), content);
   await git(repoPath, 'add', '.');
@@ -98,6 +113,7 @@ describe('crawl: arguments', () => {
     [['--folder', '1:'], "option '--folder' expects <depth>:<path>, got '1:'"],
     [['--repo='], "option '--repo' requires a non-empty path"],
     [['--repo', 'a', '--default-message='], "option '--default-message' requires a non-empty message"],
+    [['--repo', 'a', '--message-command='], "option '--message-command' requires a non-empty command"],
   ])('rejects %j', async (args, message) => {
     const result = await crawl(args);
 
@@ -114,6 +130,9 @@ describe('crawl: arguments', () => {
     expect(result.stdout).toContain('  -f, --folder <depth:path>');
     expect(result.stdout).toContain(
       '  -m, --default-message <message>   Commit message used when the answer is left empty (default: feat: various updates)',
+    );
+    expect(result.stdout).toContain(
+      '  -c, --message-command <command>   Shell command run in each repository to commit, whose output is suggested as the message\n',
     );
   });
 });
@@ -419,6 +438,132 @@ describe('crawl: push', { timeout: 60_000 }, () => {
     expect(result.stdout).toContain(`${inWorkspace('local')} has no upstream branch.\n`);
     expect(result.stdout).toContain('git push failed in local.\n');
     expect(result.stdout.endsWith('\n\n1 repo(s) failed : local\n\n')).toBe(true);
+  });
+});
+
+describe('crawl: message command', { timeout: 60_000 }, () => {
+  it('suggests the output of the command, run in each repository, as the default answer', async () => {
+    const a = await createRepo(sandbox, 'a');
+    const b = await createRepo(sandbox, 'b');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    await writeFile(path.join(b.path, 'change.txt'), 'change\n');
+    const command = await messageCommand(
+      [
+        "import path from 'node:path';",
+        "process.stderr.write('thinking\\n');",
+        "process.stdout.write('feat: update ' + path.basename(process.cwd()) + '\\n');",
+      ].join('\n'),
+    );
+    acceptSuggestion();
+
+    const result = await crawl(['--folder', '0:.', '-c', command], {
+      interactive: true,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Generating the commit message...\n');
+    expect(input).toHaveBeenNthCalledWith(
+      1,
+      { message: commitQuestion, default: 'feat: update a' },
+      expect.anything(),
+    );
+    expect(input).toHaveBeenNthCalledWith(
+      2,
+      { message: commitQuestion, default: 'feat: update b' },
+      expect.anything(),
+    );
+    // git push writes to stderr as well
+    expect(result.stderr.match(/^thinking$/gm)).toHaveLength(2);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: update a');
+    expect(await lastRemoteSubject(b.remote ?? '')).toBe('feat: update b');
+  });
+
+  it('trims the output and keeps its inner lines', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand(
+      "process.stdout.write('\\r\\n  feat: subject\\r\\n\\r\\nbody\\r\\n\\r\\n');",
+    );
+    acceptSuggestion();
+
+    const result = await crawl(['--folder', '0:.', '--message-command', command], {
+      interactive: true,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: commitQuestion, default: 'feat: subject\n\nbody' },
+      expect.anything(),
+    );
+    expect(await git(a.path, 'log', '-1', '--format=%B')).toBe('feat: subject\n\nbody');
+  });
+
+  it.each([
+    ['fix: typed', 'fix: typed'],
+    // The suggestion discarded with Backspace
+    ['', 'feat: various updates'],
+  ])('commits the answer %j given instead of the suggestion', async (answer, expected) => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand("process.stdout.write('feat: suggested');");
+    vi.mocked(input).mockResolvedValueOnce(answer);
+
+    const result = await crawl(['--folder', '0:.', '-c', command], { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe(expected);
+  });
+
+  it.each([
+    ['exits with an error', "process.stdout.write('feat: partial'); process.exit(1);"],
+    ['prints nothing', ''],
+    ['prints only blanks', "process.stdout.write(' \\r\\n\\t\\n');"],
+  ])('asks without a suggestion when the command %s', async (_case, script) => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand(script);
+    acceptSuggestion();
+
+    const result = await crawl(['--folder', '0:.', '-c', command], { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      'Generating the commit message...\nmessage command failed in a.\n',
+    );
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: commitQuestion },
+      expect.anything(),
+    );
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: various updates');
+  });
+
+  it('does not run the command when no question can be asked', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand("process.stdout.write('feat: suggested');");
+
+    const result = await crawl(['--folder', '0:.', '-c', command], { interactive: false });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain(
+      'Cannot ask for a commit message in a: stdin is not a terminal.\n',
+    );
+    expect(result.stdout).not.toContain('Generating the commit message...');
+  });
+
+  it('does not run the command when there is nothing to commit', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'local.txt'), 'local\n');
+    await git(a.path, 'add', '.');
+    await git(a.path, 'commit', '-m', 'local commit');
+    const command = await messageCommand("process.stdout.write('feat: suggested');");
+
+    const result = await crawl(['--folder', '0:.', '-c', command], { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('a pushed.\n');
+    expect(result.stdout).not.toContain('Generating the commit message...');
+    expect(input).not.toHaveBeenCalled();
   });
 });
 

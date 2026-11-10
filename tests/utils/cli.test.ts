@@ -67,6 +67,19 @@ describe('Cli questions', () => {
     );
   });
 
+  it('passes the default answer of a text question', async () => {
+    const context = createContext({ interactive: true });
+    vi.mocked(input).mockResolvedValueOnce('suggested');
+
+    await expect(
+      new Cli(context).questionText('Name?', 'white', 'suggested'),
+    ).resolves.toBe('suggested');
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: 'Name?', default: 'suggested' },
+      { input: context.stdin, output: context.stdout, signal: context.signal },
+    );
+  });
+
   it('asks to pick one of the choices', async () => {
     const context = createContext({ interactive: true });
     vi.mocked(select).mockResolvedValueOnce('b');

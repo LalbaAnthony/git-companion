@@ -49,6 +49,7 @@ npx @lalba-anthony/git-companion crawl -r ~/.claude -f 0:~/projects -f 2:~/Deskt
 | `-r`, `--repo <path>`             | Repository to sync. Repeatable. A path that is not a repository is ignored.                                                                |
 | `-f`, `--folder <depth:path>`     | Folder searched for repositories. Repeatable. The depth prefix is required: `0` checks the direct children only, `N` goes `N` levels below. |
 | `-m`, `--default-message <msg>`   | Commit message used when the answer is left empty. Default: `feat: various updates`.                                                       |
+| `-c`, `--message-command <cmd>`   | Command line run in each repository to commit; its output is suggested as the commit message. No default.                                  |
 
 At least one `--repo` or `--folder` is required. Paths are resolved against the current directory, and a leading `~` is expanded to the home directory (PowerShell does not do it for native programs). The depth is split on the first colon only, so `2:C:\Users\me\Projets` is valid.
 
@@ -72,10 +73,17 @@ Each repository to push, in discovery order:
 
 1. The reason (`has uncommitted changes.`, `has unpushed commits.` or `has no upstream branch.`) and the branch are printed, then `git status -sb` and `git diff --shortstat origin/<branch>`. These two are informational: their failures do not stop the repository.
 2. A detached HEAD is reported as a failure.
-3. With uncommitted changes, the commit message is asked. `skip` leaves the repository untouched; an empty answer uses `--default-message`. Then `git add .` and `git commit -m <message>`. When stdin is not a terminal, the repository is reported as a failure instead.
+3. With uncommitted changes, the commit message is asked. With `--message-command`, `Generating the commit message...` is printed and the command runs first; its output is shown as the default answer of the question: Enter accepts it, Tab copies it into the input to edit it, typing replaces it. `skip` leaves the repository untouched; an empty answer (no suggestion, or a suggestion discarded with Backspace) uses `--default-message`. Then `git add .` and `git commit -m <message>`. When stdin is not a terminal, the repository is reported as a failure instead, and the message command is not run.
 4. `git push`, or `git push -u origin <branch>` when the branch has no upstream. A repository without an `origin` remote therefore fails on every run until it gets a `.nogitautomation` file.
 
 Each repository to pull then runs `git pull`, unless it needed a push in the meantime.
+
+Message command:
+
+- The value is a command line, interpreted by the system shell (`cmd.exe` on Windows, `/bin/sh` elsewhere) in the directory of the repository, once per repository to commit, right before its question. It gets no input: its stdin is empty.
+- A function defined in a shell profile is not visible to that shell: the command line has to start a shell that defines it, for instance `powershell -NoLogo -NonInteractive -Command <function>`, which loads the PowerShell profile, or `bash -c <function>` with the function exported by `export -f <function>` in the Bash profile.
+- Its stdout is the message: decoded as UTF-8, CRLF turned into LF, leading and trailing blanks removed. Inner lines are kept, so a subject and a body can be returned. Everything written to stdout counts, including the `Write-Host` output of a PowerShell child. Its stderr is shown as it is produced.
+- An exit code other than 0, or an output left empty once trimmed, prints `message command failed in <name>.` and the question is asked without suggestion. The repository is not reported as a failure.
 
 A failing `git pull`, `git add`, `git commit` or `git push` prints `<step> failed in <name>.` and moves on to the next repository. The run ends with `All repos have been successfully synced.` and exit code 0, or with `<N> repo(s) failed : <names>` and exit code 1. Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130.
 

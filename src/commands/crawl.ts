@@ -24,6 +24,12 @@ interface RepoToPush {
 
 type Outcome = 'synced' | 'skipped' | 'failed';
 
+interface CommitSettings {
+  readonly defaultMessage: string;
+  // Command line printing a suggested commit message; undefined without --message-command
+  readonly messageCommand: string | undefined;
+}
+
 const pushReasonMessages: Record<PushReason, string> = {
   uncommitted: 'has uncommitted changes.',
   unpushed: 'has unpushed commits.',
@@ -174,9 +180,28 @@ function reportFailure(cli: Cli, step: string, repo: Repo): Outcome {
   return 'failed';
 }
 
+// Runs the message command in the repository. Resolves with its trimmed
+// output, or undefined when it exits with an error or prints nothing: the
+// question is then asked without a suggestion.
+async function suggestMessage(
+  repo: Repo,
+  messageCommand: string,
+  cli: Cli,
+  context: CommandContext,
+): Promise<string | undefined> {
+  cli.print('Generating the commit message...', 'info');
+  const result = await context.runner.captureShell(messageCommand, repo.path);
+  const message = result.stdout.replace(/\r\n/g, '\n').trim();
+  if (result.exitCode !== 0 || message === '') {
+    cli.print(`message command failed in ${repo.name}.`, 'warning');
+    return undefined;
+  }
+  return message;
+}
+
 async function pushRepo(
   { repo, reason }: RepoToPush,
-  defaultMessage: string,
+  settings: CommitSettings,
   cli: Cli,
   context: CommandContext,
 ): Promise<Outcome> {
@@ -216,8 +241,17 @@ async function pushRepo(
       return 'failed';
     }
 
+    const suggestion =
+      settings.messageCommand === undefined
+        ? undefined
+        : await suggestMessage(repo, settings.messageCommand, cli, context);
+
+    // An empty answer only comes back when there is no suggestion, or when it
+    // was discarded with Backspace
     const answer = await cli.questionText(
       "Enter the commit message (enter 'skip' to skip)",
+      'white',
+      suggestion,
     );
     if (answer === 'skip') {
       cli.print(`Skipping ${repo.name}.`, 'warning');
@@ -227,7 +261,8 @@ async function pushRepo(
     if ((await repo.add()) !== 0) {
       return reportFailure(cli, 'git add', repo);
     }
-    if ((await repo.commit(answer === '' ? defaultMessage : answer)) !== 0) {
+    const message = answer === '' ? settings.defaultMessage : answer;
+    if ((await repo.commit(message)) !== 0) {
       return reportFailure(cli, 'git commit', repo);
     }
   }
@@ -291,6 +326,13 @@ export const crawl = defineCommand({
       default: 'feat: various updates',
       description: 'Commit message used when the answer is left empty',
     },
+    'message-command': {
+      type: 'string',
+      short: 'c',
+      valueName: 'command',
+      description:
+        'Shell command run in each repository to commit, whose output is suggested as the message',
+    },
   },
 
   async run(options, context) {
@@ -309,6 +351,14 @@ export const crawl = defineCommand({
         commandName,
       );
     }
+    const messageCommand = options['message-command'];
+    if (messageCommand === '') {
+      throw new UsageError(
+        "option '--message-command' requires a non-empty command",
+        commandName,
+      );
+    }
+    const settings: CommitSettings = { defaultMessage, messageCommand };
 
     const cli = new Cli(context);
     cli.print('Crawling folders and scanning repos...', 'white');
@@ -356,7 +406,7 @@ export const crawl = defineCommand({
 
     const failed: Repo[] = [];
     for (const entry of toPush) {
-      if ((await pushRepo(entry, defaultMessage, cli, context)) === 'failed') {
+      if ((await pushRepo(entry, settings, cli, context)) === 'failed') {
         failed.push(entry.repo);
       }
     }

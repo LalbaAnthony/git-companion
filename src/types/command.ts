@@ -4,6 +4,11 @@ export interface CapturedProcess {
   readonly stderr: string;
 }
 
+export interface CapturedStdout {
+  readonly exitCode: number;
+  readonly stdout: string;
+}
+
 export interface ProcessRunner {
   // Output captured and decoded as UTF-8
   capture(
@@ -13,6 +18,10 @@ export interface ProcessRunner {
   ): Promise<CapturedProcess>;
   // Output shown to the user as it is produced; resolves with the exit code
   run(command: string, args: readonly string[], cwd: string): Promise<number>;
+  // A command line given by the user, interpreted by the system shell (cmd.exe
+  // on Windows, /bin/sh elsewhere). stdout is captured and decoded as UTF-8;
+  // stderr is shown to the user as it is produced, like the output of run().
+  captureShell(commandLine: string, cwd: string): Promise<CapturedStdout>;
 }
 
 export interface CommandContext {

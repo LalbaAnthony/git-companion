@@ -61,9 +61,22 @@ export class Cli {
     this.#context.stdout.write(`${this.#style(message, style)}\n`);
   }
 
-  questionText(message: string, style: Style = 'white'): Promise<string> {
+  // A default answer is shown dimmed and returned when Enter is pressed on an
+  // empty input; Tab copies it into the input to edit it, and Backspace on an
+  // empty input discards it
+  questionText(
+    message: string,
+    style: Style = 'white',
+    defaultAnswer?: string,
+  ): Promise<string> {
+    const styled = this.#style(message, style);
     return this.#prompt((context) =>
-      input({ message: this.#style(message, style) }, context),
+      input(
+        defaultAnswer === undefined
+          ? { message: styled }
+          : { message: styled, default: defaultAnswer },
+        context,
+      ),
     );
   }
 
