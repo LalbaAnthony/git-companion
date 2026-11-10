@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/LalbaAnthony/git-companion/compare/v1.1.0...v1.2.0) (2026-11-10)
+
+
+### Features
+
+* **crawl:** suggest the commit message from a command ([74a6a34](https://github.com/LalbaAnthony/git-companion/commit/74a6a34969babdd832f7f5e218ace6aa1f56dce9))
+
 # [1.1.0](https://github.com/LalbaAnthony/git-companion/compare/v1.0.0...v1.1.0) (2026-10-24)
 
 
