@@ -1,9 +1,10 @@
-import { readdir, realpath } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { AlreadyReportedError, UsageError } from '../errors.js';
 import type { CommandContext, ProcessRunner } from '../types/command.js';
 import { Cli } from '../utils/cli.js';
-import { isDirectory } from '../utils/fs.js';
+import { canonicalPath, isDirectory } from '../utils/fs.js';
+import { parseMessageCommand, suggestMessage } from '../utils/message-command.js';
 import { Repo } from '../utils/repo.js';
 import { defineCommand } from './define.js';
 
@@ -126,15 +127,6 @@ async function crawlFolder(
   return repos;
 }
 
-async function canonicalPath(target: string): Promise<string> {
-  try {
-    // Resolves symbolic links, and the letter case on Windows
-    return await realpath(target);
-  } catch {
-    return path.resolve(target);
-  }
-}
-
 // Keeps the first occurrence of every repository, in discovery order
 async function deduplicate(repos: readonly Repo[]): Promise<Repo[]> {
   const seen = new Set<string>();
@@ -178,25 +170,6 @@ function names(repos: readonly Repo[]): string {
 function reportFailure(cli: Cli, step: string, repo: Repo): Outcome {
   cli.print(`${step} failed in ${repo.name}.`, 'error');
   return 'failed';
-}
-
-// Runs the message command in the repository. Resolves with its trimmed
-// output, or undefined when it exits with an error or prints nothing: the
-// question is then asked without a suggestion.
-async function suggestMessage(
-  repo: Repo,
-  messageCommand: string,
-  cli: Cli,
-  context: CommandContext,
-): Promise<string | undefined> {
-  cli.print('Generating the commit message...', 'info');
-  const result = await context.runner.captureShell(messageCommand, repo.path);
-  const message = result.stdout.replace(/\r\n/g, '\n').trim();
-  if (result.exitCode !== 0 || message === '') {
-    cli.print(`message command failed in ${repo.name}.`, 'warning');
-    return undefined;
-  }
-  return message;
 }
 
 async function pushRepo(
@@ -244,7 +217,13 @@ async function pushRepo(
     const suggestion =
       settings.messageCommand === undefined
         ? undefined
-        : await suggestMessage(repo, settings.messageCommand, cli, context);
+        : await suggestMessage(
+            settings.messageCommand,
+            repo.path,
+            cli,
+            context,
+            repo.name,
+          );
 
     // An empty answer only comes back when there is no suggestion, or when it
     // was discarded with Backspace
@@ -351,13 +330,10 @@ export const crawl = defineCommand({
         commandName,
       );
     }
-    const messageCommand = options['message-command'];
-    if (messageCommand === '') {
-      throw new UsageError(
-        "option '--message-command' requires a non-empty command",
-        commandName,
-      );
-    }
+    const messageCommand = parseMessageCommand(
+      options['message-command'],
+      commandName,
+    );
     const settings: CommitSettings = { defaultMessage, messageCommand };
 
     const cli = new Cli(context);

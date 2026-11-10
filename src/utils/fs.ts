@@ -1,7 +1,19 @@
-import { stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
+import path from 'node:path';
 
-// These helpers follow symbolic links and answer false on any error (missing
-// entry, permission denied...)
+// Key under which two paths to the same entry compare equal: symbolic links
+// resolved, and the letter case on Windows. A path that cannot be resolved is
+// only made absolute.
+export async function canonicalPath(target: string): Promise<string> {
+  try {
+    return await realpath(target);
+  } catch {
+    return path.resolve(target);
+  }
+}
+
+// The helpers below follow symbolic links and answer false on any error
+// (missing entry, permission denied...)
 
 export async function pathExists(target: string): Promise<boolean> {
   try {

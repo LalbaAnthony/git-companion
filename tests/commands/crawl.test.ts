@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands } from '../../src/commands/index.js';
 import { main } from '../../src/main.js';
 import type { CommandContext } from '../../src/types/command.js';
-import { createContext } from '../fixtures/commands.js';
+import { createContext, writeNodeCommand } from '../fixtures/commands.js';
 import {
   createRepo,
   createSandbox,
@@ -75,12 +75,9 @@ function summary(skipped: string, toPush: string, toPull: number): string {
   ].join('\n');
 }
 
-// Writes a Node.js script outside of the workspace and returns a command line
-// that runs it, valid for cmd.exe and /bin/sh
-async function messageCommand(script: string): Promise<string> {
-  const scriptPath = path.join(sandbox.root, 'message-command.mjs');
-  await writeFile(scriptPath, script);
-  return `"${process.execPath}" "${scriptPath}"`;
+// Outside of the workspace, so that the crawl does not see it
+function messageCommand(script: string): Promise<string> {
+  return writeNodeCommand(sandbox.root, script);
 }
 
 // Behaves like Enter pressed on an empty input: the default answer, if any

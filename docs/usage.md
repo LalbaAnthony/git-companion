@@ -37,6 +37,7 @@ To call it as `git-companion` from any directory:
 | -------- | ---------------------------------------------------------------------------------------- |
 | `crawl`  | Find Git repositories, commit and push the ones that need it, pull the others.           |
 | `ignore` | Add patterns to the `.gitignore` of the current repository.                              |
+| `acp`    | Add, commit and push every change of the current repository.                             |
 
 ### crawl
 
@@ -105,6 +106,39 @@ The file is the `.gitignore` at the root of the working tree that contains the c
 4. A pattern that cannot be read or written prints `Failed to write <file> (<code>)`, and the next patterns are still processed.
 
 The function ends with exit code 0 when every pattern was added or already present, 1 otherwise. Patterns are written as given: leading and trailing spaces are kept and count in the comparison. Paths are printed in the native form of the platform.
+
+### acp
+
+```sh
+npx @lalba-anthony/git-companion acp -m "feat: add the login page"
+npx @lalba-anthony/git-companion acp -c "<command printing a commit message>"
+npx @lalba-anthony/git-companion acp
+```
+
+| Option                              | Effect                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `-m`, `--message <message>`         | Commit message, used without question. Surrounding blanks are removed; a blank value is a usage error.        |
+| `-c`, `--message-command <command>` | Command line whose output is suggested as the commit message, with the same rules as for `crawl`.             |
+
+`--message` and `--message-command` cannot be used together: usage error. Without either, the message is asked.
+
+Checks, in this order, before anything is changed:
+
+1. Outside of a working tree: `Not a git repository.`, exit code 1.
+2. The current directory must be the root of its working tree, as given by `git rev-parse --show-toplevel` (linked worktrees and submodules included), because `git add .` would only cover the current folder. Otherwise: `Not at repo root (<root>). Aborting.`, exit code 1. The paths are compared after resolving symbolic links and, on Windows, the letter case.
+3. Nothing to commit (`git status --porcelain` prints nothing; a failing `git status` counts as changes): `Nothing to commit.`, exit code 0, without question and without running the message command. Local commits that are not pushed yet stay as they are.
+4. Detached HEAD: `Detached HEAD. Aborting.`, exit code 1.
+
+The message:
+
+- With `--message`, no question is asked, so the function also runs without a terminal (scripts, pipelines).
+- Otherwise the question `Commit message` is asked. When stdin is not a terminal, `Cannot ask for a commit message: stdin is not a terminal.` is printed instead, with exit code 1, and the message command is not run.
+- With `--message-command`, `Generating the commit message...` is printed and the command runs at the root of the repository. Its output is shown as the default answer of the question: Enter accepts it, Tab copies it into the input to edit it, typing replaces it, Backspace discards it. When the command exits with an error or prints nothing, `message command failed.` is printed and the question is asked without suggestion. How the command line is run and how its output is read are described under [crawl](#crawl).
+- The answer is trimmed. A blank answer prints `Commit message required. Aborting.`, with exit code 1, and nothing is added.
+
+Then `git add .`, `git commit -m <message>`, and `git push`, or `git push -u origin <branch>` when the branch has no upstream. The first failing step prints `git add failed.`, `git commit failed.` or `git push failed.` and stops with exit code 1; after a failed push, the commit stays in place. Success prints `Committed and pushed.` with exit code 0.
+
+Every message goes to stdout; the output of git is shown as it is produced. Ctrl+C prints `Interrupted.` on stderr and exits with 130.
 
 ## Argument rules
 
