@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { vi } from 'vitest';
 import { defineCommand } from '../../src/commands/define.js';
@@ -47,6 +49,17 @@ export function createBeta(
     },
     run,
   });
+}
+
+// Writes a Node.js script into the directory and returns a command line that
+// runs it, valid for cmd.exe and /bin/sh: a stand-in for a --message-command
+export async function writeNodeCommand(
+  directory: string,
+  script: string,
+): Promise<string> {
+  const scriptPath = path.join(directory, 'message-command.mjs');
+  await writeFile(scriptPath, script);
+  return `"${process.execPath}" "${scriptPath}"`;
 }
 
 export type CapturedStream = Writable & { readonly text: () => string };

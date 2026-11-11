@@ -10,7 +10,7 @@ The file layout and overall structure are intentional and must be kept. Extend i
 
 ## Status
 
-- Two functions are implemented: `crawl` and `ignore` (see [crawl decisions](#crawl-decisions) and [ignore decisions](#ignore-decisions)).
+- Three functions are implemented: `crawl`, `ignore` and `acp` (see [crawl decisions](#crawl-decisions), [ignore decisions](#ignore-decisions) and [acp decisions](#acp-decisions)).
 - The number of functions will grow, and every function has its own, different options.
 
 ## Commands
@@ -48,15 +48,17 @@ src/commands/index.ts         the registry: readonly Command[]
 src/commands/define.ts        defineCommand(): typed declaration of a function
 src/commands/crawl.ts         the crawl function
 src/commands/ignore.ts        the ignore function
+src/commands/acp.ts          the acp function
 src/utils/cli.ts              Cli (print, clear, questionText/List/Confirm) and shouldUseColors()
 src/utils/process.ts          createProcessRunner(): capture() / run() of external programs, captureShell() of a command line
 src/utils/repo.ts             Repo: git operations on a working copy
-src/utils/fs.ts               pathExists(), isDirectory(), isFile() (follow symlinks, false on error)
+src/utils/message-command.ts  parseMessageCommand(), suggestMessage(): the --message-command shared by crawl and acp
+src/utils/fs.ts               canonicalPath(), pathExists(), isDirectory(), isFile() (follow symlinks, false on error)
 src/types/command.ts          Command, option specs, OptionValues, CommandContext, ProcessRunner
 src/types/cli.ts              CliArguments (help | version | run)
-tests/fixtures/commands.ts    fake commands (alpha, beta-long-name), captureStream(), createContext()
+tests/fixtures/commands.ts    fake commands (alpha, beta-long-name), captureStream(), createContext(), writeNodeCommand()
 tests/fixtures/git.ts         sandbox with an isolated git config, repo/remote factories
-tests/commands/               crawl, ignore and registry tests
+tests/commands/               crawl, ignore, acp and registry tests
 tests/utils/                  Cli and process runner tests
 ```
 
@@ -107,12 +109,12 @@ Rules for a command:
 
 Every point below was decided by the user, including the ones that look odd; they are essential to the user's way of working. Do not change any of them without asking. `docs/usage.md` describes the resulting behavior in full.
 
-- Options: `-r/--repo <path>` and `-f/--folder <depth:path>` are repeatable and have no default; at least one of them is required. The depth prefix of `--folder` is mandatory, and a single depth per folder replaces any recursive flag (0 = direct children only). `-m/--default-message` defaults to `feat: various updates`.
+- Options: `-r/--repo <path>` and `-f/--folder <depth:path>` are repeatable and have no default; at least one of them is required. The depth prefix of `--folder` is mandatory, and a single depth per folder replaces any recursive flag (0 = direct children only). `-m/--default-message` defaults to `feat: various updates`; it is the suggestion of the commit question when no message command output is available, never an implicit fallback.
 - `Cli` (`src/utils/cli.ts`) is the terminal utility of the whole repository, not of crawl only, with `print`, `clear`, `questionText`, `questionList` and `questionConfirm` (which defaults to no).
 - Discovery: only a `.git` directory counts (worktrees and submodules are ignored); the crawled folder itself is added when it is a repository and its children are still explored; children are sorted case-insensitively; a repository among the children stops the descent; `.git` directories are never explored; a missing or unreadable folder, and a `--repo` path that is not a repository, are ignored silently; repositories are deduplicated by real path, first occurrence wins.
 - Classification: a `.nogitautomation` file opts a repository out; a failing `git status` counts as dirty; a clean repository ahead of its upstream, or without upstream (detached HEAD included), goes to the push list.
-- Push loop: the guarded pull call that never pulls in practice is intentional; a detached HEAD fails without a question; without a terminal, a repository needing a commit message fails; `skip` leaves the repository untouched and an empty answer uses the default message; a clean repository is pushed without a question; a branch without upstream is pushed with `git push -u origin <branch>`, so a repository without `origin` fails on every run.
-- Message command: `-c/--message-command <command>` is optional, without default; an empty value is a usage error. It is a generic command line run by `captureShell()` (system shell, `shell: true`) in the repository, only for a repository with uncommitted changes, only when a question can be asked, sequentially right before that question, after `Generating the commit message...` (info). Its stdout (CRLF to LF, trimmed, inner lines kept) becomes the default answer of the question (inquirer `prefill: 'tab'`: Enter accepts, Tab edits, typing replaces, Backspace discards it so that an empty answer falls back to `--default-message`); its stderr is shown live. An exit code other than 0 or an empty output prints `message command failed in <name>.` (warning) and the question is asked without default: the repository does not fail. The function the user plugs in differs per machine: never name a specific one in code, docs or tests.
+- Push loop: the guarded pull call that never pulls in practice is intentional; a detached HEAD fails without a question; without a terminal, a repository needing a commit message fails; the question always has a default answer (message command output, else `--default-message`) and is `required` (inquirer): an empty answer, only possible after discarding the suggestion with Backspace, is refused and the question stays open; `skip` leaves the repository untouched; a clean repository is pushed without a question; a branch without upstream is pushed with `git push -u origin <branch>`, so a repository without `origin` fails on every run.
+- Message command: `-c/--message-command <command>` is optional, without default; an empty value is a usage error. It is implemented once in `src/utils/message-command.ts` and must stay strictly the same in crawl and acp. It is a generic command line run by `captureShell()` (system shell, `shell: true`) in the repository, only for a repository with uncommitted changes, only when a question can be asked, sequentially right before that question, after `Generating the commit message...` (info). Its stdout (CRLF to LF, trimmed, inner lines kept) becomes the default answer of the question (inquirer `prefill: 'tab'`: Enter accepts, Tab edits, typing replaces, Backspace discards it); its stderr is shown live. An exit code other than 0 or an empty output prints `message command failed in <name>.` (warning) and `--default-message` is suggested instead: the repository does not fail. The function the user plugs in differs per machine: never name a specific one in code, docs or tests.
 - Failures of pull/add/commit/push are reported as `<step> failed in <name>.` and the run goes on; it ends with `<N> repo(s) failed : <names>` and exit code 1. `git status -sb` and `git diff --shortstat` are informational only.
 - Output: the exact messages and blank lines are part of the contract, including the space before the colons. Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130. Colors follow the terminal, and a leading `~` is expanded.
 
@@ -127,6 +129,16 @@ Every point below was decided by the user. Do not change any of them without ask
 - Appending always uses LF, even in a CRLF file; an unterminated last line gets an LF first.
 - A read or write failure prints `Failed to write <file> (<code>)` and the next patterns are still processed; the run then ends with exit 1. An error without a system code surfaces as `unexpected error`.
 - Output: every message goes to stdout through `Cli`, styled by outcome: `Created` info, `Added` success, already present warning, failures error. No `onInterrupt`: Ctrl+C prints the generic `Interrupted.`.
+
+## acp decisions
+
+Port of the user's `gacp` shell function (add/commit/push). The function is named `acp`, not `gacp`, because the user prefixes Git aliases with `g`: `gacp` would become `ggacp`. Every point below was decided by the user. Do not change any of them without asking. `docs/usage.md` describes the resulting behavior in full.
+
+- Options: `-m/--message <message>` and `-c/--message-command <command>` (the exact same option as crawl's, through `src/utils/message-command.ts`). Both optional and mutually exclusive (usage error). A blank `--message` is a usage error; `--message` is trimmed.
+- Checks, in order, all through `Cli` on stdout with the texts of the original function: outside of a working tree `Not a git repository.` (exit 1); current directory not the root given by `git rev-parse --show-toplevel`, compared with `canonicalPath()`, `Not at repo root (<root>). Aborting.` (exit 1); clean working tree `Nothing to commit.` (warning, exit 0, no question, no message command, unpushed commits stay unpushed); detached HEAD `Detached HEAD. Aborting.` (exit 1).
+- Message: `--message` is used without question, so acp works in pipelines. Otherwise, without a terminal, `Cannot ask for a commit message: stdin is not a terminal.` (exit 1) and the message command is not run. With `-c`: `Generating the commit message...`, then the question `Commit message` prefilled as in crawl; a failed command prints `message command failed.` (no repository name) and the question is asked without default. The answer is trimmed; a blank one prints `Commit message required. Aborting.` (exit 1).
+- Steps: `git add .`, `git commit -m`, then `git push`, or `git push -u origin <branch>` without upstream (unlike the original function). The first failure prints `git add failed.`, `git commit failed.` or `git push failed.` (exit 1). Success prints `Committed and pushed.`.
+- No `onInterrupt`: Ctrl+C prints the generic `Interrupted.`.
 
 ## Git and release
 

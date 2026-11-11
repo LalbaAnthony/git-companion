@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands } from '../../src/commands/index.js';
 import { main } from '../../src/main.js';
 import type { CommandContext } from '../../src/types/command.js';
-import { createContext } from '../fixtures/commands.js';
+import { createContext, writeNodeCommand } from '../fixtures/commands.js';
 import {
   createRepo,
   createSandbox,
@@ -75,12 +75,9 @@ function summary(skipped: string, toPush: string, toPull: number): string {
   ].join('\n');
 }
 
-// Writes a Node.js script outside of the workspace and returns a command line
-// that runs it, valid for cmd.exe and /bin/sh
-async function messageCommand(script: string): Promise<string> {
-  const scriptPath = path.join(sandbox.root, 'message-command.mjs');
-  await writeFile(scriptPath, script);
-  return `"${process.execPath}" "${scriptPath}"`;
+// Outside of the workspace, so that the crawl does not see it
+function messageCommand(script: string): Promise<string> {
+  return writeNodeCommand(sandbox.root, script);
 }
 
 // Behaves like Enter pressed on an empty input: the default answer, if any
@@ -129,7 +126,7 @@ describe('crawl: arguments', () => {
     expect(result.stdout).toContain('  -r, --repo <path>');
     expect(result.stdout).toContain('  -f, --folder <depth:path>');
     expect(result.stdout).toContain(
-      '  -m, --default-message <message>   Commit message used when the answer is left empty (default: feat: various updates)',
+      '  -m, --default-message <message>   Commit message suggested when no message command output is available (default: feat: various updates)',
     );
     expect(result.stdout).toContain(
       '  -c, --message-command <command>   Shell command run in each repository to commit, whose output is suggested as the message\n',
@@ -322,7 +319,7 @@ describe('crawl: push', { timeout: 60_000 }, () => {
     );
     expect(result.stdout).toContain('a committed and pushed.\n');
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion },
+      { message: commitQuestion, default: 'feat: various updates', required: true },
       expect.anything(),
     );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: my change');
@@ -332,14 +329,18 @@ describe('crawl: push', { timeout: 60_000 }, () => {
   it.each([
     [[], 'feat: various updates'],
     [['-m', 'chore: sync'], 'chore: sync'],
-  ])('uses the default message for an empty answer (%j)', async (args, expected) => {
+  ])('suggests the default message and refuses an empty answer (%j)', async (args, expected) => {
     const a = await createRepo(sandbox, 'a');
     await writeFile(path.join(a.path, 'change.txt'), 'change\n');
-    vi.mocked(input).mockResolvedValueOnce('');
+    acceptSuggestion();
 
     const result = await crawl(['--folder', '0:.', ...args], { interactive: true });
 
     expect(result.exitCode).toBe(0);
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: commitQuestion, default: expected, required: true },
+      expect.anything(),
+    );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe(expected);
   });
 
@@ -464,12 +465,12 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
     expect(result.stdout).toContain('Generating the commit message...\n');
     expect(input).toHaveBeenNthCalledWith(
       1,
-      { message: commitQuestion, default: 'feat: update a' },
+      { message: commitQuestion, default: 'feat: update a', required: true },
       expect.anything(),
     );
     expect(input).toHaveBeenNthCalledWith(
       2,
-      { message: commitQuestion, default: 'feat: update b' },
+      { message: commitQuestion, default: 'feat: update b', required: true },
       expect.anything(),
     );
     // git push writes to stderr as well
@@ -492,33 +493,29 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
 
     expect(result.exitCode).toBe(0);
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion, default: 'feat: subject\n\nbody' },
+      { message: commitQuestion, default: 'feat: subject\n\nbody', required: true },
       expect.anything(),
     );
     expect(await git(a.path, 'log', '-1', '--format=%B')).toBe('feat: subject\n\nbody');
   });
 
-  it.each([
-    ['fix: typed', 'fix: typed'],
-    // The suggestion discarded with Backspace
-    ['', 'feat: various updates'],
-  ])('commits the answer %j given instead of the suggestion', async (answer, expected) => {
+  it('commits the answer typed instead of the suggestion', async () => {
     const a = await createRepo(sandbox, 'a');
     await writeFile(path.join(a.path, 'change.txt'), 'change\n');
     const command = await messageCommand("process.stdout.write('feat: suggested');");
-    vi.mocked(input).mockResolvedValueOnce(answer);
+    vi.mocked(input).mockResolvedValueOnce('fix: typed');
 
     const result = await crawl(['--folder', '0:.', '-c', command], { interactive: true });
 
     expect(result.exitCode).toBe(0);
-    expect(await lastRemoteSubject(a.remote ?? '')).toBe(expected);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('fix: typed');
   });
 
   it.each([
     ['exits with an error', "process.stdout.write('feat: partial'); process.exit(1);"],
     ['prints nothing', ''],
     ['prints only blanks', "process.stdout.write(' \\r\\n\\t\\n');"],
-  ])('asks without a suggestion when the command %s', async (_case, script) => {
+  ])('suggests the default message when the command %s', async (_case, script) => {
     const a = await createRepo(sandbox, 'a');
     await writeFile(path.join(a.path, 'change.txt'), 'change\n');
     const command = await messageCommand(script);
@@ -531,7 +528,7 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
       'Generating the commit message...\nmessage command failed in a.\n',
     );
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion },
+      { message: commitQuestion, default: 'feat: various updates', required: true },
       expect.anything(),
     );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: various updates');
