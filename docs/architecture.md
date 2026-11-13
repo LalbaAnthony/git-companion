@@ -18,6 +18,7 @@ src/utils/cli.ts           Cli: styled output and questions; shouldUseColors()
 src/utils/process.ts       createProcessRunner(): runs external programs (git, user command lines)
 src/utils/repo.ts          Repo: a Git working copy driven through the git executable
 src/utils/message-command.ts  --message-command, shared by crawl and acp: validation, run, output
+src/utils/conventional-commit.ts  Conventional Commits check and --no-conventional, shared by crawl and acp
 src/utils/fs.ts            canonicalPath(), pathExists(), isDirectory(), isFile()
 src/types/command.ts       Command, option specs, CommandContext, ProcessRunner
 src/types/cli.ts           CliArguments
@@ -30,7 +31,8 @@ cli.ts -> main.ts -> index.ts -> errors.ts
 cli.ts -> utils/process.ts, utils/cli.ts (shouldUseColors)
 cli.ts -> commands/index.ts -> commands/<name>.ts -> commands/define.ts
                                                   -> utils/cli.ts, utils/repo.ts -> utils/fs.ts
-                                                  -> utils/message-command.ts (crawl, acp)
+                                                  -> utils/message-command.ts (crawl, acp) -> utils/conventional-commit.ts
+                                                  -> utils/conventional-commit.ts (crawl, acp)
 ```
 
 In code, a function of the CLI is called a command, because `function` is a reserved word. User-facing text says function.
@@ -115,3 +117,4 @@ A command writes through `new Cli(context)` (or `context.stdout`), runs programs
 - `readPackageVersion()` throws when `package.json` has no string `version`: a broken manifest is a packaging bug, not something to hide behind a placeholder.
 - Prompt errors are recognized by name (`ExitPromptError`, `AbortPromptError`): their classes live in `@inquirer/core`, which is not a direct dependency.
 - The message command (`--message-command` of crawl and acp, implemented once in `src/utils/message-command.ts`) is a command line run through the system shell, not an executable with arguments: a function defined in a shell profile is not an executable, so the user picks the shell that defines it. `captureShell()` passes the line alone to `spawn` with `shell: true`, since passing arguments along with `shell` is deprecated by Node.js. The function plugged in differs per machine, so the code, the docs and the tests never name one.
+- The Conventional Commits check (`src/utils/conventional-commit.ts`, shared by crawl and acp) reimplements the blocking rules of `@commitlint/config-conventional` instead of running commitlint, which would add runtime dependencies. Its `subject-case` rule refuses the sentence, start, pascal and upper cases; each of them leaves the first letter unchanged by `toUpperCase()`, which is the sentence case test, so only that test is implemented. The module also exports the `--no-conventional` option spec, so that every function declares it identically. The check of an answer runs inside the question (inquirer `validate`), which keeps the question open on a refused answer.

@@ -3,6 +3,11 @@ import path from 'node:path';
 import { AlreadyReportedError, UsageError } from '../errors.js';
 import type { CommandContext, ProcessRunner } from '../types/command.js';
 import { Cli } from '../utils/cli.js';
+import {
+  checkMessageOption,
+  commitAnswerError,
+  noConventionalOption,
+} from '../utils/conventional-commit.js';
 import { canonicalPath, isDirectory } from '../utils/fs.js';
 import { parseMessageCommand, suggestMessage } from '../utils/message-command.js';
 import { Repo } from '../utils/repo.js';
@@ -29,7 +34,11 @@ interface CommitSettings {
   readonly defaultMessage: string;
   // Command line printing a suggested commit message; undefined without --message-command
   readonly messageCommand: string | undefined;
+  // Commit messages must follow Conventional Commits; false with --no-conventional
+  readonly conventional: boolean;
 }
+
+const skipAnswer = 'skip';
 
 const pushReasonMessages: Record<PushReason, string> = {
   uncommitted: 'has uncommitted changes.',
@@ -220,20 +229,30 @@ async function pushRepo(
         : await suggestMessage(
             settings.messageCommand,
             repo.path,
+            settings.conventional,
             cli,
             context,
             repo.name,
           );
 
     // There is always a suggestion, and no implicit fallback: the default
-    // message is only committed when it is accepted, and an empty answer
-    // (suggestion discarded with Backspace) keeps the question open
-    const answer = await cli.questionText(
-      "Enter the commit message (enter 'skip' to skip)",
-      'white',
-      { default: suggestion ?? settings.defaultMessage, required: true },
-    );
-    if (answer === 'skip') {
+    // message is only committed when it is accepted, and a blank answer
+    // (suggestion discarded with Backspace) keeps the question open, like a
+    // message that does not follow Conventional Commits
+    const answer = (
+      await cli.questionText(
+        `Enter the commit message (enter '${skipAnswer}' to skip)`,
+        'white',
+        {
+          default: suggestion ?? settings.defaultMessage,
+          validate: (value) =>
+            value.trim() === skipAnswer
+              ? undefined
+              : commitAnswerError(value, settings.conventional),
+        },
+      )
+    ).trim();
+    if (answer === skipAnswer) {
       cli.print(`Skipping ${repo.name}.`, 'warning');
       return 'skipped';
     }
@@ -313,6 +332,7 @@ export const crawl = defineCommand({
       description:
         'Shell command run in each repository to commit, whose output is suggested as the message',
     },
+    'no-conventional': noConventionalOption,
   },
 
   async run(options, context) {
@@ -324,18 +344,26 @@ export const crawl = defineCommand({
         commandName,
       );
     }
-    const defaultMessage = options['default-message'];
+    const conventional = !options['no-conventional'];
+    const defaultMessage = options['default-message'].trim();
     if (defaultMessage === '') {
       throw new UsageError(
         "option '--default-message' requires a non-empty message",
         commandName,
       );
     }
+    if (conventional) {
+      checkMessageOption(defaultMessage, 'default-message', commandName);
+    }
     const messageCommand = parseMessageCommand(
       options['message-command'],
       commandName,
     );
-    const settings: CommitSettings = { defaultMessage, messageCommand };
+    const settings: CommitSettings = {
+      defaultMessage,
+      messageCommand,
+      conventional,
+    };
 
     const cli = new Cli(context);
     cli.print('Crawling folders and scanning repos...', 'white');

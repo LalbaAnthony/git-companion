@@ -25,6 +25,8 @@ npx @lalba-anthony/git-companion ignore -p node_modules/ -p "*.log"
 npx @lalba-anthony/git-companion acp -m "feat: add the login page"
 ```
 
+`crawl` and `acp` only commit messages that follow [Conventional Commits](https://www.conventionalcommits.org/); `-n`/`--no-conventional` turns the check off.
+
 Requires Node.js 24 or later and `git` in the `PATH`.
 
 ## Documentation

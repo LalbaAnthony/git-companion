@@ -8,6 +8,7 @@ import type { CommandContext } from '../../src/types/command.js';
 import { createContext, writeNodeCommand } from '../fixtures/commands.js';
 import { createRepo, createSandbox, git, lastRemoteSubject } from '../fixtures/git.js';
 import type { RepoFixture, Sandbox } from '../fixtures/git.js';
+import { answerInTurn, anyValidate } from '../fixtures/prompts.js';
 
 vi.mock('@inquirer/prompts', () => ({
   input: vi.fn(),
@@ -75,6 +76,15 @@ describe('acp: arguments', () => {
   it.each([
     [['--message='], "option '--message' requires a non-empty message"],
     [['-m', ' \t '], "option '--message' requires a non-empty message"],
+    [['-n', '-m', ' \t '], "option '--message' requires a non-empty message"],
+    [
+      ['-m', 'wip: x'],
+      "option '--message' is not a Conventional Commits message: unknown type 'wip'",
+    ],
+    [
+      ['-m', '  Feat: x  ', '-c', 'cmd'],
+      "option '--message' is not a Conventional Commits message: type must be lowercase",
+    ],
     [['--message-command='], "option '--message-command' requires a non-empty command"],
     [
       ['-m', 'feat: x', '-c', 'cmd'],
@@ -99,6 +109,9 @@ describe('acp: arguments', () => {
     );
     expect(result.stdout).toContain(
       '  -c, --message-command <command>   Shell command whose output is suggested as the commit message\n',
+    );
+    expect(result.stdout).toContain(
+      '  -n, --no-conventional             Accept commit messages that do not follow Conventional Commits\n',
     );
   });
 });
@@ -182,15 +195,53 @@ describe('acp: message', { timeout: 60_000 }, () => {
     const result = await acp([], a.path, { interactive: true });
 
     expect(result.exitCode).toBe(0);
-    expect(input).toHaveBeenCalledExactlyOnceWith({ message: question }, expect.anything());
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: question, validate: anyValidate },
+      expect.anything(),
+    );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: typed');
   });
 
-  it('aborts on a blank answer', async () => {
+  it('keeps the question open until the answer follows Conventional Commits', async () => {
+    const a = await dirtyRepo();
+    const errors = answerInTurn('', ' \t ', 'Feat: typed', '  feat: typed  ');
+
+    const result = await acp([], a.path, { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(errors).toEqual([
+      'Commit message required.',
+      'Commit message required.',
+      'Not a Conventional Commits message: type must be lowercase',
+    ]);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: typed');
+  });
+
+  it('commits any --message with --no-conventional', async () => {
+    const a = await dirtyRepo();
+
+    const result = await acp(['-n', '-m', ' Anything goes. '], a.path);
+
+    expect(result.exitCode).toBe(0);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
+  });
+
+  it('commits any answer with --no-conventional', async () => {
+    const a = await dirtyRepo();
+    vi.mocked(input).mockResolvedValueOnce('Anything goes.');
+
+    const result = await acp(['--no-conventional'], a.path, { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(input).toHaveBeenCalledExactlyOnceWith({ message: question }, expect.anything());
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
+  });
+
+  it('aborts on a blank answer with --no-conventional', async () => {
     const a = await dirtyRepo();
     vi.mocked(input).mockResolvedValueOnce(' \t ');
 
-    const result = await acp([], a.path, { interactive: true });
+    const result = await acp(['-n'], a.path, { interactive: true });
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout).toBe('Commit message required. Aborting.\n');
@@ -232,7 +283,7 @@ describe('acp: message command', { timeout: 60_000 }, () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout.startsWith('Generating the commit message...\n')).toBe(true);
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: question, default: 'feat: update a\n\nbody' },
+      { message: question, default: 'feat: update a\n\nbody', validate: anyValidate },
       expect.anything(),
     );
     expect(result.stderr).toContain('thinking\n');
@@ -250,21 +301,40 @@ describe('acp: message command', { timeout: 60_000 }, () => {
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('fix: typed');
   });
 
-  it('aborts when the suggestion is discarded and nothing is typed', async () => {
+  it('aborts when the suggestion is discarded and nothing is typed, with --no-conventional', async () => {
     const a = await dirtyRepo();
     const command = await messageCommand("process.stdout.write('feat: suggested');");
     vi.mocked(input).mockResolvedValueOnce('');
 
-    const result = await acp(['-c', command], a.path, { interactive: true });
+    const result = await acp(['-n', '-c', command], a.path, { interactive: true });
 
     expect(result.exitCode).toBe(1);
     expect(result.stdout.endsWith('Commit message required. Aborting.\n')).toBe(true);
     await expectUntouched(a);
   });
 
+  it('suggests any output with --no-conventional', async () => {
+    const a = await dirtyRepo();
+    const command = await messageCommand("process.stdout.write('Anything goes.');");
+    acceptSuggestion();
+
+    const result = await acp(['-n', '-c', command], a.path, { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: question, default: 'Anything goes.' },
+      expect.anything(),
+    );
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
+  });
+
   it.each([
     ['exits with an error', "process.stdout.write('feat: partial'); process.exit(1);"],
     ['prints nothing', ''],
+    [
+      'prints a message that does not follow Conventional Commits',
+      "process.stdout.write('wip: suggested');",
+    ],
   ])('asks without a suggestion when the command %s', async (_case, script) => {
     const a = await dirtyRepo();
     const command = await messageCommand(script);
@@ -276,7 +346,10 @@ describe('acp: message command', { timeout: 60_000 }, () => {
     expect(
       result.stdout.startsWith('Generating the commit message...\nmessage command failed.\n'),
     ).toBe(true);
-    expect(input).toHaveBeenCalledExactlyOnceWith({ message: question }, expect.anything());
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: question, validate: anyValidate },
+      expect.anything(),
+    );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: typed');
   });
 });

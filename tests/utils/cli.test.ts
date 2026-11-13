@@ -83,6 +83,19 @@ describe('Cli questions', () => {
     );
   });
 
+  it('validates the answer of a text question', async () => {
+    const context = createContext({ interactive: true });
+    vi.mocked(input).mockResolvedValueOnce('ok');
+
+    await new Cli(context).questionText('Name?', 'white', {
+      validate: (answer) => (answer === 'ok' ? undefined : 'not ok'),
+    });
+
+    const config = vi.mocked(input).mock.calls[0]?.[0];
+    expect(config?.validate?.('ok')).toBe(true);
+    expect(config?.validate?.('ko')).toBe('not ok');
+  });
+
   it('leaves out the text question options that are not set', async () => {
     const context = createContext({ interactive: true });
     vi.mocked(input).mockResolvedValueOnce('answer');
@@ -90,6 +103,7 @@ describe('Cli questions', () => {
     await new Cli(context).questionText('Name?', 'white', {
       default: undefined,
       required: false,
+      validate: undefined,
     });
     expect(input).toHaveBeenCalledExactlyOnceWith(
       { message: 'Name?' },

@@ -15,6 +15,7 @@ import {
   pushFromElsewhere,
 } from '../fixtures/git.js';
 import type { Sandbox } from '../fixtures/git.js';
+import { answerInTurn, anyValidate } from '../fixtures/prompts.js';
 
 vi.mock('@inquirer/prompts', () => ({
   input: vi.fn(),
@@ -110,6 +111,15 @@ describe('crawl: arguments', () => {
     [['--folder', '1:'], "option '--folder' expects <depth>:<path>, got '1:'"],
     [['--repo='], "option '--repo' requires a non-empty path"],
     [['--repo', 'a', '--default-message='], "option '--default-message' requires a non-empty message"],
+    [['--repo', 'a', '-n', '-m', ' \t '], "option '--default-message' requires a non-empty message"],
+    [
+      ['--repo', 'a', '-m', 'wip: sync'],
+      "option '--default-message' is not a Conventional Commits message: unknown type 'wip'",
+    ],
+    [
+      ['--repo', 'a', '-m', '  chore: Sync  '],
+      "option '--default-message' is not a Conventional Commits message: description must not start with an uppercase letter",
+    ],
     [['--repo', 'a', '--message-command='], "option '--message-command' requires a non-empty command"],
   ])('rejects %j', async (args, message) => {
     const result = await crawl(args);
@@ -130,6 +140,9 @@ describe('crawl: arguments', () => {
     );
     expect(result.stdout).toContain(
       '  -c, --message-command <command>   Shell command run in each repository to commit, whose output is suggested as the message\n',
+    );
+    expect(result.stdout).toContain(
+      '  -n, --no-conventional             Accept commit messages that do not follow Conventional Commits\n',
     );
   });
 });
@@ -319,7 +332,7 @@ describe('crawl: push', { timeout: 60_000 }, () => {
     );
     expect(result.stdout).toContain('a committed and pushed.\n');
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion, default: 'feat: various updates', required: true },
+      { message: commitQuestion, default: 'feat: various updates', validate: anyValidate },
       expect.anything(),
     );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: my change');
@@ -328,8 +341,8 @@ describe('crawl: push', { timeout: 60_000 }, () => {
 
   it.each([
     [[], 'feat: various updates'],
-    [['-m', 'chore: sync'], 'chore: sync'],
-  ])('suggests the default message and refuses an empty answer (%j)', async (args, expected) => {
+    [['-m', '  chore: sync  '], 'chore: sync'],
+  ])('suggests the trimmed default message (%j)', async (args, expected) => {
     const a = await createRepo(sandbox, 'a');
     await writeFile(path.join(a.path, 'change.txt'), 'change\n');
     acceptSuggestion();
@@ -338,16 +351,50 @@ describe('crawl: push', { timeout: 60_000 }, () => {
 
     expect(result.exitCode).toBe(0);
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion, default: expected, required: true },
+      { message: commitQuestion, default: expected, validate: anyValidate },
       expect.anything(),
     );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe(expected);
   });
 
-  it('leaves the repository untouched when the answer is skip', async () => {
+  it('keeps the question open until the answer follows Conventional Commits, and trims it', async () => {
     const a = await createRepo(sandbox, 'a');
     await writeFile(path.join(a.path, 'change.txt'), 'change\n');
-    vi.mocked(input).mockResolvedValueOnce('skip');
+    const errors = answerInTurn('', ' \t ', 'Fix: typed', '  fix: typed  ');
+
+    const result = await crawl(['--folder', '0:.'], { interactive: true });
+
+    expect(result.exitCode).toBe(0);
+    expect(errors).toEqual([
+      'Commit message required.',
+      'Commit message required.',
+      'Not a Conventional Commits message: type must be lowercase',
+    ]);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('fix: typed');
+  });
+
+  it('accepts any message but a blank one with --no-conventional', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const errors = answerInTurn(' \t ', ' Anything goes. ');
+
+    const result = await crawl(['--folder', '0:.', '-n', '-m', 'Sync.'], {
+      interactive: true,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(input).toHaveBeenCalledExactlyOnceWith(
+      { message: commitQuestion, default: 'Sync.', validate: anyValidate },
+      expect.anything(),
+    );
+    expect(errors).toEqual(['Commit message required.']);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
+  });
+
+  it.each([['skip'], ['  skip ']])('leaves the repository untouched when the answer is %j', async (answer) => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    answerInTurn(answer);
 
     const result = await crawl(['--folder', '0:.'], { interactive: true });
 
@@ -465,12 +512,12 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
     expect(result.stdout).toContain('Generating the commit message...\n');
     expect(input).toHaveBeenNthCalledWith(
       1,
-      { message: commitQuestion, default: 'feat: update a', required: true },
+      { message: commitQuestion, default: 'feat: update a', validate: anyValidate },
       expect.anything(),
     );
     expect(input).toHaveBeenNthCalledWith(
       2,
-      { message: commitQuestion, default: 'feat: update b', required: true },
+      { message: commitQuestion, default: 'feat: update b', validate: anyValidate },
       expect.anything(),
     );
     // git push writes to stderr as well
@@ -493,7 +540,7 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
 
     expect(result.exitCode).toBe(0);
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion, default: 'feat: subject\n\nbody', required: true },
+      { message: commitQuestion, default: 'feat: subject\n\nbody', validate: anyValidate },
       expect.anything(),
     );
     expect(await git(a.path, 'log', '-1', '--format=%B')).toBe('feat: subject\n\nbody');
@@ -515,6 +562,10 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
     ['exits with an error', "process.stdout.write('feat: partial'); process.exit(1);"],
     ['prints nothing', ''],
     ['prints only blanks', "process.stdout.write(' \\r\\n\\t\\n');"],
+    [
+      'prints a message that does not follow Conventional Commits',
+      "process.stdout.write('feat: subject\\nbody');",
+    ],
   ])('suggests the default message when the command %s', async (_case, script) => {
     const a = await createRepo(sandbox, 'a');
     await writeFile(path.join(a.path, 'change.txt'), 'change\n');
@@ -528,10 +579,25 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
       'Generating the commit message...\nmessage command failed in a.\n',
     );
     expect(input).toHaveBeenCalledExactlyOnceWith(
-      { message: commitQuestion, default: 'feat: various updates', required: true },
+      { message: commitQuestion, default: 'feat: various updates', validate: anyValidate },
       expect.anything(),
     );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: various updates');
+  });
+
+  it('suggests any output with --no-conventional', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand("process.stdout.write('Anything goes.');");
+    acceptSuggestion();
+
+    const result = await crawl(['--folder', '0:.', '-n', '-c', command], {
+      interactive: true,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain('message command failed');
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
   });
 
   it('does not run the command when no question can be asked', async () => {

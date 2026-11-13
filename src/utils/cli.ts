@@ -25,6 +25,9 @@ export interface TextQuestionOptions {
   readonly default?: string | undefined;
   // An empty answer is refused and the question stays open
   readonly required?: boolean;
+  // Error shown under the question, which stays open, or undefined when the
+  // answer is accepted
+  readonly validate?: ((answer: string) => string | undefined) | undefined;
 }
 
 interface PromptContext {
@@ -76,7 +79,12 @@ export class Cli {
     options: TextQuestionOptions = {},
   ): Promise<string> {
     // Only the options that are set reach inquirer
-    const config: { message: string; default?: string; required?: boolean } = {
+    const config: {
+      message: string;
+      default?: string;
+      required?: boolean;
+      validate?: (answer: string) => string | true;
+    } = {
       message: this.#style(message, style),
     };
     if (options.default !== undefined) {
@@ -84,6 +92,10 @@ export class Cli {
     }
     if (options.required === true) {
       config.required = true;
+    }
+    const { validate } = options;
+    if (validate !== undefined) {
+      config.validate = (answer) => validate(answer) ?? true;
     }
     return this.#prompt((context) => input(config, context));
   }

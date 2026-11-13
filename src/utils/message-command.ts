@@ -1,6 +1,7 @@
 import { UsageError } from '../errors.js';
 import type { CommandContext } from '../types/command.js';
 import type { Cli } from './cli.js';
+import { conventionalCommitViolation } from './conventional-commit.js';
 
 // --message-command, shared by every function that commits, so that it
 // behaves the same everywhere
@@ -19,12 +20,14 @@ export function parseMessageCommand(
 }
 
 // Runs the message command in the repository. Resolves with its trimmed
-// output, or undefined when it exits with an error or prints nothing: the
-// caller then suggests its own fallback, if it has one. The repository name,
-// when given, ends up in the warning.
+// output, or undefined when it exits with an error, prints nothing, or, when
+// conventional is set, prints a message that does not follow Conventional
+// Commits: the caller then suggests its own fallback, if it has one. The
+// repository name, when given, ends up in the warning.
 export async function suggestMessage(
   messageCommand: string,
   repoPath: string,
+  conventional: boolean,
   cli: Cli,
   context: CommandContext,
   repoName?: string,
@@ -32,7 +35,11 @@ export async function suggestMessage(
   cli.print('Generating the commit message...', 'info');
   const result = await context.runner.captureShell(messageCommand, repoPath);
   const message = result.stdout.replace(/\r\n/g, '\n').trim();
-  if (result.exitCode !== 0 || message === '') {
+  if (
+    result.exitCode !== 0 ||
+    message === '' ||
+    (conventional && conventionalCommitViolation(message) !== undefined)
+  ) {
     const location = repoName === undefined ? '' : ` in ${repoName}`;
     cli.print(`message command failed${location}.`, 'warning');
     return undefined;
