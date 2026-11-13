@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/LalbaAnthony/git-companion/compare/v1.3.0...v1.4.0) (2026-11-13)
+
+
+### Features
+
+* **crawl,acp:** check commit messages against Conventional Commits ([d7b7894](https://github.com/LalbaAnthony/git-companion/commit/d7b78947ffa71b020930e6d1d392484c79548f8a))
+
 # [1.3.0](https://github.com/LalbaAnthony/git-companion/compare/v1.2.0...v1.3.0) (2026-11-11)
 
 
