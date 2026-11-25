@@ -1,6 +1,6 @@
 {
   "name": "@lalba-anthony/git-companion",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "A companion tool for managing Git repositories efficiently.",
   "keywords": [
     "cli",
