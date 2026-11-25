@@ -7,7 +7,12 @@ import {
   noConventionalOption,
 } from '../utils/conventional-commit.js';
 import { canonicalPath } from '../utils/fs.js';
-import { parseMessageCommand, suggestMessage } from '../utils/message-command.js';
+import {
+  acceptedMessageCommand,
+  parseMessageCommand,
+  suggestMessage,
+  yesOption,
+} from '../utils/message-command.js';
 import { Repo } from '../utils/repo.js';
 import { defineCommand } from './define.js';
 
@@ -50,7 +55,7 @@ async function askMessage(
   const suggestion =
     messageCommand === undefined
       ? undefined
-      : await suggestMessage(messageCommand, root, conventional, cli, context);
+      : await suggestMessage(messageCommand, root, conventional, false, cli, context);
   // With the check, a blank answer keeps the question open; without it, it
   // aborts below
   const answer = (
@@ -65,6 +70,29 @@ async function askMessage(
     fail(cli, 'Commit message required. Aborting.');
   }
   return answer;
+}
+
+// --yes: the output of the message command is committed as is, and its
+// failure stops the function before anything is added
+async function generateMessage(
+  root: string,
+  messageCommand: string,
+  conventional: boolean,
+  cli: Cli,
+  context: CommandContext,
+): Promise<string> {
+  const message = await suggestMessage(
+    messageCommand,
+    root,
+    conventional,
+    true,
+    cli,
+    context,
+  );
+  if (message === undefined) {
+    throw new AlreadyReportedError();
+  }
+  return message;
 }
 
 export const acp = defineCommand({
@@ -84,6 +112,7 @@ export const acp = defineCommand({
       description:
         'Shell command whose output is suggested as the commit message',
     },
+    yes: yesOption,
     'no-conventional': noConventionalOption,
   },
 
@@ -103,6 +132,11 @@ export const acp = defineCommand({
         commandName,
       );
     }
+    const acceptedCommand = acceptedMessageCommand(
+      options.yes,
+      messageCommand,
+      commandName,
+    );
 
     const cli = new Cli(context);
     const root = await new Repo(context.cwd, context.runner).topLevel();
@@ -127,7 +161,9 @@ export const acp = defineCommand({
 
     const commitMessage =
       message ??
-      (await askMessage(root, messageCommand, conventional, cli, context));
+      (acceptedCommand === undefined
+        ? await askMessage(root, messageCommand, conventional, cli, context)
+        : await generateMessage(root, acceptedCommand, conventional, cli, context));
 
     if ((await repo.add()) !== 0) {
       fail(cli, 'git add failed.');

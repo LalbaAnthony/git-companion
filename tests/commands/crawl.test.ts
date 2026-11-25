@@ -121,6 +121,7 @@ describe('crawl: arguments', () => {
       "option '--default-message' is not a Conventional Commits message: description must not start with an uppercase letter",
     ],
     [['--repo', 'a', '--message-command='], "option '--message-command' requires a non-empty command"],
+    [['--repo', 'a', '-y'], "option '--yes' requires '--message-command'"],
   ])('rejects %j', async (args, message) => {
     const result = await crawl(args);
 
@@ -140,6 +141,9 @@ describe('crawl: arguments', () => {
     );
     expect(result.stdout).toContain(
       '  -c, --message-command <command>   Shell command run in each repository to commit, whose output is suggested as the message\n',
+    );
+    expect(result.stdout).toContain(
+      '  -y, --yes                         Commit the output of the message command without asking\n',
     );
     expect(result.stdout).toContain(
       '  -n, --no-conventional             Accept commit messages that do not follow Conventional Commits\n',
@@ -627,6 +631,104 @@ describe('crawl: message command', { timeout: 60_000 }, () => {
     expect(result.stdout).toContain('a pushed.\n');
     expect(result.stdout).not.toContain('Generating the commit message...');
     expect(input).not.toHaveBeenCalled();
+  });
+});
+
+describe('crawl: --yes', { timeout: 60_000 }, () => {
+  it('commits the output of the command without asking, also without a terminal', async () => {
+    const a = await createRepo(sandbox, 'a');
+    const b = await createRepo(sandbox, 'b');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    await writeFile(path.join(b.path, 'change.txt'), 'change\n');
+    const command = await messageCommand(
+      [
+        "import path from 'node:path';",
+        "process.stdout.write('\\r\\n  feat: update ' + path.basename(process.cwd()) + '\\r\\n\\r\\nbody\\r\\n');",
+      ].join('\n'),
+    );
+
+    const result = await crawl(['--folder', '0:.', '-c', command, '-y'], {
+      interactive: false,
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(input).not.toHaveBeenCalled();
+    expect(result.stdout.match(/^Generating the commit message\.\.\.$/gm)).toHaveLength(2);
+    expect(result.stdout).toContain('a committed and pushed.\n');
+    expect(result.stdout).toContain('b committed and pushed.\n');
+    expect(await git(a.path, 'log', '-1', '--format=%B')).toBe('feat: update a\n\nbody');
+    expect(await lastRemoteSubject(b.remote ?? '')).toBe('feat: update b');
+  });
+
+  it.each([
+    ['exits with an error', "process.stdout.write('feat: partial'); process.exit(1);"],
+    ['prints nothing', ''],
+    [
+      'prints a message that does not follow Conventional Commits',
+      "process.stdout.write('Update.');",
+    ],
+  ])('fails the repository when the command %s, and goes on', async (_case, script) => {
+    const a = await createRepo(sandbox, 'a');
+    const b = await createRepo(sandbox, 'b');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    await writeFile(path.join(b.path, 'change.txt'), 'change\n');
+    // The script only applies to a: b gets a valid message
+    const command = await messageCommand(
+      [
+        "import path from 'node:path';",
+        "if (path.basename(process.cwd()) === 'b') {",
+        "  process.stdout.write('feat: update b');",
+        '} else {',
+        script,
+        '}',
+      ].join('\n'),
+    );
+
+    const result = await crawl(['--folder', '0:.', '-c', command, '--yes'], {
+      interactive: true,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(input).not.toHaveBeenCalled();
+    expect(result.stdout).toContain(
+      'Generating the commit message...\nmessage command failed in a.\n',
+    );
+    expect(result.stdout).toContain('b committed and pushed.\n');
+    expect(result.stdout).toContain('1 repo(s) failed : a\n');
+    expect(await git(a.path, 'status', '--porcelain')).toBe('?? change.txt');
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('initial');
+    expect(await lastRemoteSubject(b.remote ?? '')).toBe('feat: update b');
+  });
+
+  it('commits any output with --no-conventional', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand("process.stdout.write('Anything goes.');");
+
+    const result = await crawl(['--folder', '0:.', '-n', '-y', '-c', command]);
+
+    expect(result.exitCode).toBe(0);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
+  });
+
+  it('prints the failure of the command as an error, a warning without --yes', async () => {
+    const a = await createRepo(sandbox, 'a');
+    await writeFile(path.join(a.path, 'change.txt'), 'change\n');
+    const command = await messageCommand('process.exit(1);');
+
+    const accepted = await crawl(['--folder', '0:.', '-y', '-c', command], {
+      colors: true,
+    });
+    acceptSuggestion();
+    const asked = await crawl(['--folder', '0:.', '-c', command], {
+      colors: true,
+      interactive: true,
+    });
+
+    expect(accepted.exitCode).toBe(1);
+    expect(accepted.stdout).toContain('\u001b[91mmessage command failed in a.\u001b[0m\n');
+    expect(asked.exitCode).toBe(0);
+    expect(asked.stdout).toContain('\u001b[93mmessage command failed in a.\u001b[0m\n');
   });
 });
 

@@ -90,6 +90,8 @@ describe('acp: arguments', () => {
       ['-m', 'feat: x', '-c', 'cmd'],
       "options '--message' and '--message-command' cannot be used together",
     ],
+    [['-y'], "option '--yes' requires '--message-command'"],
+    [['-m', 'feat: x', '--yes'], "option '--yes' requires '--message-command'"],
   ])('rejects %j before touching anything', async (args, message) => {
     const result = await acp(args, sandbox.workspace);
 
@@ -109,6 +111,9 @@ describe('acp: arguments', () => {
     );
     expect(result.stdout).toContain(
       '  -c, --message-command <command>   Shell command whose output is suggested as the commit message\n',
+    );
+    expect(result.stdout).toContain(
+      '  -y, --yes                         Commit the output of the message command without asking\n',
     );
     expect(result.stdout).toContain(
       '  -n, --no-conventional             Accept commit messages that do not follow Conventional Commits\n',
@@ -150,16 +155,19 @@ describe('acp: checks', { timeout: 60_000 }, () => {
     },
   );
 
-  it('stops with 0 when there is nothing to commit, without asking or running the command', async () => {
-    const a = await createRepo(sandbox, 'a');
-    const command = await messageCommand("process.stdout.write('feat: suggested');");
+  it.each([[[]], [['-y']]])(
+    'stops with 0 when there is nothing to commit, without asking or running the command (%j)',
+    async (extra) => {
+      const a = await createRepo(sandbox, 'a');
+      const command = await messageCommand("process.stdout.write('feat: suggested');");
 
-    const result = await acp(['-c', command], a.path, { interactive: true });
+      const result = await acp(['-c', command, ...extra], a.path, { interactive: true });
 
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toBe('Nothing to commit.\n');
-    expect(input).not.toHaveBeenCalled();
-  });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('Nothing to commit.\n');
+      expect(input).not.toHaveBeenCalled();
+    },
+  );
 
   it('fails a detached HEAD without asking anything', async () => {
     const a = await createRepo(sandbox, 'a');
@@ -351,6 +359,68 @@ describe('acp: message command', { timeout: 60_000 }, () => {
       expect.anything(),
     );
     expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: typed');
+  });
+});
+
+describe('acp: --yes', { timeout: 60_000 }, () => {
+  it('commits the output of the command without asking, also without a terminal', async () => {
+    const a = await dirtyRepo();
+    const command = await messageCommand(
+      [
+        "import path from 'node:path';",
+        "process.stdout.write('\\r\\n  feat: update ' + path.basename(process.cwd()) + '\\r\\n\\r\\nbody\\r\\n');",
+      ].join('\n'),
+    );
+
+    const result = await acp(['-c', command, '-y'], a.path, { interactive: false });
+
+    expect(result.exitCode).toBe(0);
+    expect(input).not.toHaveBeenCalled();
+    expect(result.stdout.startsWith('Generating the commit message...\n')).toBe(true);
+    expect(result.stdout.endsWith('Committed and pushed.\n')).toBe(true);
+    expect(await git(a.path, 'log', '-1', '--format=%B')).toBe('feat: update a\n\nbody');
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('feat: update a');
+  });
+
+  it.each([
+    ['exits with an error', "process.stdout.write('feat: partial'); process.exit(1);"],
+    ['prints nothing', ''],
+    [
+      'prints a message that does not follow Conventional Commits',
+      "process.stdout.write('wip: suggested');",
+    ],
+  ])('fails before adding anything when the command %s', async (_case, script) => {
+    const a = await dirtyRepo();
+    const command = await messageCommand(script);
+
+    const result = await acp(['-c', command, '--yes'], a.path, { interactive: true });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('Generating the commit message...\nmessage command failed.\n');
+    expect(input).not.toHaveBeenCalled();
+    await expectUntouched(a);
+  });
+
+  it('commits any output with --no-conventional', async () => {
+    const a = await dirtyRepo();
+    const command = await messageCommand("process.stdout.write('Anything goes.');");
+
+    const result = await acp(['-n', '-y', '-c', command], a.path);
+
+    expect(result.exitCode).toBe(0);
+    expect(await lastRemoteSubject(a.remote ?? '')).toBe('Anything goes.');
+  });
+
+  it('prints the failure of the command as an error', async () => {
+    const a = await dirtyRepo();
+    const command = await messageCommand('process.exit(1);');
+
+    const result = await acp(['-y', '-c', command], a.path, { colors: true });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe(
+      '\u001b[96mGenerating the commit message...\u001b[0m\n\u001b[91mmessage command failed.\u001b[0m\n',
+    );
   });
 });
 

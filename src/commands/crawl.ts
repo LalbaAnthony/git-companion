@@ -9,7 +9,12 @@ import {
   noConventionalOption,
 } from '../utils/conventional-commit.js';
 import { canonicalPath, isDirectory } from '../utils/fs.js';
-import { parseMessageCommand, suggestMessage } from '../utils/message-command.js';
+import {
+  acceptedMessageCommand,
+  parseMessageCommand,
+  suggestMessage,
+  yesOption,
+} from '../utils/message-command.js';
 import { Repo } from '../utils/repo.js';
 import { defineCommand } from './define.js';
 
@@ -34,6 +39,9 @@ interface CommitSettings {
   readonly defaultMessage: string;
   // Command line printing a suggested commit message; undefined without --message-command
   readonly messageCommand: string | undefined;
+  // The message command whose output is committed without question; undefined
+  // without --yes
+  readonly acceptedCommand: string | undefined;
   // Commit messages must follow Conventional Commits; false with --no-conventional
   readonly conventional: boolean;
 }
@@ -215,52 +223,71 @@ async function pushRepo(
   }
 
   if (reason === 'uncommitted') {
-    if (!context.interactive) {
-      cli.print(
-        `Cannot ask for a commit message in ${repo.name}: stdin is not a terminal.`,
-        'error',
+    let message: string;
+    if (settings.acceptedCommand !== undefined) {
+      // --yes: no question, so no terminal is needed, and no fallback
+      const output = await suggestMessage(
+        settings.acceptedCommand,
+        repo.path,
+        settings.conventional,
+        true,
+        cli,
+        context,
+        repo.name,
       );
-      return 'failed';
-    }
+      if (output === undefined) {
+        return 'failed';
+      }
+      message = output;
+    } else {
+      if (!context.interactive) {
+        cli.print(
+          `Cannot ask for a commit message in ${repo.name}: stdin is not a terminal.`,
+          'error',
+        );
+        return 'failed';
+      }
 
-    const suggestion =
-      settings.messageCommand === undefined
-        ? undefined
-        : await suggestMessage(
-            settings.messageCommand,
-            repo.path,
-            settings.conventional,
-            cli,
-            context,
-            repo.name,
-          );
+      const suggestion =
+        settings.messageCommand === undefined
+          ? undefined
+          : await suggestMessage(
+              settings.messageCommand,
+              repo.path,
+              settings.conventional,
+              false,
+              cli,
+              context,
+              repo.name,
+            );
 
-    // There is always a suggestion, and no implicit fallback: the default
-    // message is only committed when it is accepted, and a blank answer
-    // (suggestion discarded with Backspace) keeps the question open, like a
-    // message that does not follow Conventional Commits
-    const answer = (
-      await cli.questionText(
-        `Enter the commit message (enter '${skipAnswer}' to skip)`,
-        'white',
-        {
-          default: suggestion ?? settings.defaultMessage,
-          validate: (value) =>
-            value.trim() === skipAnswer
-              ? undefined
-              : commitAnswerError(value, settings.conventional),
-        },
-      )
-    ).trim();
-    if (answer === skipAnswer) {
-      cli.print(`Skipping ${repo.name}.`, 'warning');
-      return 'skipped';
+      // There is always a suggestion, and no implicit fallback: the default
+      // message is only committed when it is accepted, and a blank answer
+      // (suggestion discarded with Backspace) keeps the question open, like a
+      // message that does not follow Conventional Commits
+      message = (
+        await cli.questionText(
+          `Enter the commit message (enter '${skipAnswer}' to skip)`,
+          'white',
+          {
+            default: suggestion ?? settings.defaultMessage,
+            validate: (value) =>
+              value.trim() === skipAnswer
+                ? undefined
+                : commitAnswerError(value, settings.conventional),
+          },
+        )
+      ).trim();
+      if (message === skipAnswer) {
+        cli.print(`Skipping ${repo.name}.`, 'warning');
+        return 'skipped';
+      }
     }
 
     if ((await repo.add()) !== 0) {
       return reportFailure(cli, 'git add', repo);
     }
-    if ((await repo.commit(answer)) !== 0) {
+    if ((await repo.commit(message)) !== 0) {
       return reportFailure(cli, 'git commit', repo);
     }
   }
@@ -332,6 +359,7 @@ export const crawl = defineCommand({
       description:
         'Shell command run in each repository to commit, whose output is suggested as the message',
     },
+    yes: yesOption,
     'no-conventional': noConventionalOption,
   },
 
@@ -362,6 +390,11 @@ export const crawl = defineCommand({
     const settings: CommitSettings = {
       defaultMessage,
       messageCommand,
+      acceptedCommand: acceptedMessageCommand(
+        options.yes,
+        messageCommand,
+        commandName,
+      ),
       conventional,
     };
 

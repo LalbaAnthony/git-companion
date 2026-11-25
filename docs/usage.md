@@ -51,6 +51,7 @@ npx @lalba-anthony/git-companion crawl -r ~/.claude -f 0:~/projects -f 2:~/Deskt
 | `-f`, `--folder <depth:path>`   | Folder searched for repositories. Repeatable. The depth prefix is required: `0` checks the direct children only, `N` goes `N` levels below.                                                                                                                             |
 | `-m`, `--default-message <msg>` | Commit message suggested in the question when no message command output is available. Default: `feat: various updates`. Surrounding blanks are removed; a blank value, or a value that does not follow [Conventional Commits](#conventional-commits), is a usage error. |
 | `-c`, `--message-command <cmd>` | Command line run in each repository to commit; its output is suggested as the commit message. No default.                                                                                                                                                               |
+| `-y`, `--yes`                   | Commit the output of the message command as is, without question, so also without a terminal. Requires `--message-command`. See the message command below.                                                                                                              |
 | `-n`, `--no-conventional`       | Accept commit messages that do not follow [Conventional Commits](#conventional-commits).                                                                                                                                                                                |
 
 At least one `--repo` or `--folder` is required. Paths are resolved against the current directory, and a leading `~` is expanded to the home directory (PowerShell does not do it for native programs). The depth is split on the first colon only, so `2:C:\Users\me\Projets` is valid.
@@ -75,7 +76,7 @@ Each repository to push, in discovery order:
 
 1. The reason (`has uncommitted changes.`, `has unpushed commits.` or `has no upstream branch.`) and the branch are printed, then `git status -sb` and `git diff --shortstat origin/<branch>`. These two are informational: their failures do not stop the repository.
 2. A detached HEAD is reported as a failure.
-3. With uncommitted changes, the commit message is asked. With `--message-command`, `Generating the commit message...` is printed and the command runs first. The question always shows a suggestion as its default answer: the output of the message command, or `--default-message` without message command or when it fails. Enter accepts it, Tab copies it into the input to edit it, typing replaces it. The answer is trimmed, then checked, and there is no implicit fallback: a blank answer (suggestion discarded with Backspace) shows `Commit message required.`, and an answer that does not follow [Conventional Commits](#conventional-commits) shows `Not a Conventional Commits message: <reason>`; in both cases the question stays open. `skip`, surrounding blanks ignored, leaves the repository untouched. Then `git add .` and `git commit -m <message>`. When stdin is not a terminal, the repository is reported as a failure instead, and the message command is not run.
+3. With uncommitted changes, the commit message is asked. With `--message-command`, `Generating the commit message...` is printed and the command runs first. The question always shows a suggestion as its default answer: the output of the message command, or `--default-message` without message command or when it fails. Enter accepts it, Tab copies it into the input to edit it, typing replaces it. The answer is trimmed, then checked, and there is no implicit fallback: a blank answer (suggestion discarded with Backspace) shows `Commit message required.`, and an answer that does not follow [Conventional Commits](#conventional-commits) shows `Not a Conventional Commits message: <reason>`; in both cases the question stays open. `skip`, surrounding blanks ignored, leaves the repository untouched. Then `git add .` and `git commit -m <message>`. Without `--yes`, when stdin is not a terminal, the repository is reported as a failure instead, and the message command is not run. With `--yes`, no question is asked: the output of the message command is committed as is, also without a terminal, and a failure of the command fails the repository (see below).
 4. `git push`, or `git push -u origin <branch>` when the branch has no upstream. A repository without an `origin` remote therefore fails on every run until it gets a `.nogitautomation` file.
 
 Each repository to pull then runs `git pull`, unless it needed a push in the meantime.
@@ -83,9 +84,10 @@ Each repository to pull then runs `git pull`, unless it needed a push in the mea
 Message command:
 
 - The value is a command line, interpreted by the system shell (`cmd.exe` on Windows, `/bin/sh` elsewhere) in the directory of the repository, once per repository to commit, right before its question. It gets no input: its stdin is empty.
-- A function defined in a shell profile is not visible to that shell: the command line has to start a shell that defines it, for instance `powershell -NoLogo -NonInteractive -Command <function>`, which loads the PowerShell profile, or `bash -c <function>` with the function exported by `export -f <function>` in the Bash profile.
+- A function defined in a shell profile is not visible to that shell: the command line has to start a shell that defines it, for instance `powershell -NoLogo -NonInteractive -Command <function>`, which loads the PowerShell profile, or, for a Bash function, `bash -c "$VAR"` with `VAR="$(declare -f <function>); <function>"` set by the caller: `export -f` does not work, because `/bin/sh` is dash on Debian and Ubuntu, which drops exported functions.
 - Its stdout is the message: decoded as UTF-8, CRLF turned into LF, leading and trailing blanks removed. Inner lines are kept, so a subject and a body can be returned. Everything written to stdout counts, including the `Write-Host` output of a PowerShell child. Its stderr is shown as it is produced.
-- An exit code other than 0, an output left empty once trimmed, or an output that does not follow [Conventional Commits](#conventional-commits), prints `message command failed in <name>.`, and the question suggests `--default-message` instead (in `acp`, which has no default message, it is asked without suggestion). The repository is not reported as a failure.
+- An exit code other than 0, an output left empty once trimmed, or an output that does not follow [Conventional Commits](#conventional-commits), is a failure of the command. Without `--yes`, it prints `message command failed in <name>.` as a warning, and the question suggests `--default-message` instead (in `acp`, which has no default message, it is asked without suggestion). The repository is not reported as a failure.
+- With `--yes`, the command is the only source of the message: its output is committed as is, without question, and `--default-message` and `skip` are not used. A failure of the command prints `message command failed in <name>.` as an error, nothing is committed, and the repository is reported as a failure; the next repositories are still processed. `--yes` without `--message-command` is a usage error.
 
 A failing `git pull`, `git add`, `git commit` or `git push` prints `<step> failed in <name>.` and moves on to the next repository. The run ends with `All repos have been successfully synced.` and exit code 0, or with `<N> repo(s) failed : <names>` and exit code 1. Ctrl+C prints `Interrupted. Aborting sync.` and exits with 130.
 
@@ -113,6 +115,7 @@ The function ends with exit code 0 when every pattern was added or already prese
 ```sh
 npx @lalba-anthony/git-companion acp -m "feat: add the login page"
 npx @lalba-anthony/git-companion acp -c "<command printing a commit message>"
+npx @lalba-anthony/git-companion acp -c "<command printing a commit message>" -y
 npx @lalba-anthony/git-companion acp
 ```
 
@@ -120,9 +123,10 @@ npx @lalba-anthony/git-companion acp
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-m`, `--message <message>`         | Commit message, used without question. Surrounding blanks are removed; a blank value, or a value that does not follow [Conventional Commits](#conventional-commits), is a usage error. |
 | `-c`, `--message-command <command>` | Command line whose output is suggested as the commit message, with the same rules as for `crawl`.                                                                                      |
+| `-y`, `--yes`                       | Commit the output of the message command as is, without question, so also without a terminal. Requires `--message-command`.                                                            |
 | `-n`, `--no-conventional`           | Accept commit messages that do not follow [Conventional Commits](#conventional-commits).                                                                                               |
 
-`--message` and `--message-command` cannot be used together: usage error. Without either, the message is asked.
+`--message` and `--message-command` cannot be used together: usage error. Without either, the message is asked. `--yes` without `--message-command` is a usage error.
 
 Checks, in this order, before anything is changed:
 
@@ -134,6 +138,7 @@ Checks, in this order, before anything is changed:
 The message:
 
 - With `--message`, no question is asked, so the function also runs without a terminal (scripts, pipelines).
+- With `--message-command` and `--yes`, no question is asked either, and the function also runs without a terminal: `Generating the commit message...` is printed, the command runs at the root of the repository, and its output is committed as is. When the command exits with an error, prints nothing or prints a message that does not follow [Conventional Commits](#conventional-commits), `message command failed.` is printed as an error and the function stops with exit code 1, before anything is added.
 - Otherwise the question `Commit message` is asked. When stdin is not a terminal, `Cannot ask for a commit message: stdin is not a terminal.` is printed instead, with exit code 1, and the message command is not run.
 - With `--message-command`, `Generating the commit message...` is printed and the command runs at the root of the repository. Its output is shown as the default answer of the question: Enter accepts it, Tab copies it into the input to edit it, typing replaces it, Backspace discards it. When the command exits with an error, prints nothing or prints a message that does not follow [Conventional Commits](#conventional-commits), `message command failed.` is printed and the question is asked without suggestion. How the command line is run and how its output is read are described under [crawl](#crawl).
 - The answer is trimmed, then checked: a blank answer shows `Commit message required.`, and an answer that does not follow Conventional Commits shows `Not a Conventional Commits message: <reason>`; in both cases the question stays open.
