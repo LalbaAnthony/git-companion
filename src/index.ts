@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import type { ParseArgsOptionsConfig } from 'node:util';
 import { UsageError } from './errors.js';
-import type { CliArguments } from './types/cli.js';
+import type { CliArguments, OptionToken, TokenizeConfig } from './types/cli.js';
 import type { Command, OptionSpec, OptionSpecs, OptionValues } from './types/command.js';
 
 // Only accepted on their own: git-companion -h | -v
@@ -15,20 +15,17 @@ const commandHelpOptions: ParseArgsOptionsConfig = {
   help: { type: 'boolean', short: 'h' },
 };
 
+// Typed with TokenizeConfig, from which the token types are derived
 function tokenize(args: readonly string[], options: ParseArgsOptionsConfig) {
-  // strict: false so that every problem goes through UsageError with a uniform
-  // message, instead of the raw ERR_PARSE_ARGS_* text
-  return parseArgs({
+  const config: TokenizeConfig = {
     args,
     options,
     allowPositionals: true,
     strict: false,
     tokens: true,
-  });
+  };
+  return parseArgs(config);
 }
-
-type Token = ReturnType<typeof tokenize>['tokens'][number];
-type OptionToken = Extract<Token, { kind: 'option' }>;
 
 function parseGlobalArguments(argv: readonly string[]): CliArguments {
   let help = false;

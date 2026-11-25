@@ -6,19 +6,12 @@ import {
 } from './errors.js';
 import { formatCommandUsage, formatGeneralUsage } from './help.js';
 import { parseCliArguments } from './index.js';
-import type { Command, CommandContext } from './types/command.js';
+import type { MainOptions } from './types/cli.js';
+import type { Command } from './types/command.js';
 import { readPackageVersion } from './version.js';
 
 const successExitCode = 0;
 const unexpectedFailureExitCode = 1;
-
-export interface MainOptions {
-  readonly argv: readonly string[];
-  readonly registry: readonly Command[];
-  readonly context: CommandContext;
-  // Print the stack trace of a failure on stderr
-  readonly debug: boolean;
-}
 
 function writeLine(stream: NodeJS.WritableStream, text: string): void {
   stream.write(`${text}\n`);

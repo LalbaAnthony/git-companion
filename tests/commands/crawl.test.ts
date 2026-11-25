@@ -14,7 +14,7 @@ import {
   lastRemoteSubject,
   pushFromElsewhere,
 } from '../fixtures/git.js';
-import type { Sandbox } from '../fixtures/git.js';
+import type { Sandbox } from '../types/git.js';
 import { answerInTurn, anyValidate } from '../fixtures/prompts.js';
 
 vi.mock('@inquirer/prompts', () => ({

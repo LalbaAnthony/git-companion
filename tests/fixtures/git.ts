@@ -4,19 +4,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { vi } from 'vitest';
+import type { RepoFixture, Sandbox } from '../types/git.js';
 
 const execFileAsync = promisify(execFile);
 
 export async function git(cwd: string, ...args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('git', args, { cwd });
   return stdout.trim();
-}
-
-export interface Sandbox {
-  readonly root: string;
-  // Folder that holds the working copies to crawl
-  readonly workspace: string;
-  readonly cleanup: () => Promise<void>;
 }
 
 // Temporary directory with a private git configuration, so that the user's
@@ -55,12 +49,6 @@ export async function createSandbox(): Promise<Sandbox> {
     cleanup: () =>
       rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
   };
-}
-
-export interface RepoFixture {
-  readonly path: string;
-  // Bare repository used as origin; undefined for a local-only repository
-  readonly remote: string | undefined;
 }
 
 // A working copy with one commit, pushed to its own bare origin unless

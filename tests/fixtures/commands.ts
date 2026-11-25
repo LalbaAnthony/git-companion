@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import { defineCommand } from '../../src/commands/define.js';
 import type { Command, CommandContext } from '../../src/types/command.js';
 import { createProcessRunner } from '../../src/utils/process.js';
+import type { CapturedStream, TestContext } from '../types/commands.js';
 
 export function createAlpha(
   run: Command['run'] = vi.fn(() => Promise.resolve()),
@@ -62,8 +63,6 @@ export async function writeNodeCommand(
   return `"${process.execPath}" "${scriptPath}"`;
 }
 
-export type CapturedStream = Writable & { readonly text: () => string };
-
 export function captureStream(): CapturedStream {
   const chunks: Buffer[] = [];
   const stream = new Writable({
@@ -75,11 +74,6 @@ export function captureStream(): CapturedStream {
   return Object.assign(stream, {
     text: () => Buffer.concat(chunks).toString('utf8'),
   });
-}
-
-export interface TestContext extends CommandContext {
-  readonly stdout: CapturedStream;
-  readonly stderr: CapturedStream;
 }
 
 // Child process output is forwarded to the captured streams instead of the terminal

@@ -9,7 +9,7 @@ import type { CommandContext } from '../../src/types/command.js';
 import { styles } from '../../src/utils/cli.js';
 import { createContext } from '../fixtures/commands.js';
 import { createRepo, createSandbox, git } from '../fixtures/git.js';
-import type { Sandbox } from '../fixtures/git.js';
+import type { Sandbox } from '../types/git.js';
 
 // appendFile keeps its real implementation unless a test replaces it
 vi.mock('node:fs/promises', async (importOriginal) => {

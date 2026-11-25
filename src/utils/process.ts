@@ -5,21 +5,11 @@ import type {
   CapturedProcess,
   CapturedStdout,
   ProcessRunner,
+  ProcessRunnerOptions,
 } from '../types/command.js';
 
 // Exit status of a Windows console process stopped by Ctrl+C (STATUS_CONTROL_C_EXIT)
 const windowsCtrlCExitCode = 0xc000013a;
-
-export interface ProcessRunnerOptions {
-  // Aborting it kills the running child and rejects with the abort reason
-  readonly signal: AbortSignal;
-  // Receives the output of run(); without it, run() inherits the terminal so
-  // that git keeps its colors, progress and credential prompts
-  readonly output?: {
-    readonly stdout: NodeJS.WritableStream;
-    readonly stderr: NodeJS.WritableStream;
-  };
-}
 
 function abortReason(signal: AbortSignal): Error {
   return signal.reason instanceof Error

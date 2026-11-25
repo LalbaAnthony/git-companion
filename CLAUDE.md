@@ -55,11 +55,15 @@ src/utils/repo.ts             Repo: git operations on a working copy
 src/utils/message-command.ts  parseMessageCommand(), acceptedMessageCommand(), suggestMessage(), yesOption: the --message-command and --yes shared by crawl and acp
 src/utils/conventional-commit.ts  conventionalCommitViolation(), checkMessageOption(), commitAnswerError(), noConventionalOption: the Conventional Commits check shared by crawl and acp
 src/utils/fs.ts               canonicalPath(), pathExists(), isDirectory(), isFile() (follow symlinks, false on error)
-src/types/command.ts          Command, option specs, OptionValues, CommandContext, ProcessRunner
-src/types/cli.ts              CliArguments (help | version | run)
+src/types/command.ts          Command, option specs, OptionValues, CommandContext, ProcessRunner, ProcessRunnerOptions
+src/types/cli.ts              CliArguments (help | version | run), MainOptions, TokenizeConfig, Token, OptionToken
+src/types/terminal.ts         Style, TextQuestionOptions, PromptContext
+src/types/help.ts             HelpRow
+src/types/crawl.ts            FolderToCrawl, PushReason, RepoToPush, Outcome, CommitSettings
 tests/fixtures/commands.ts    fake commands (alpha, beta-long-name), captureStream(), createContext(), writeNodeCommand()
 tests/fixtures/git.ts         sandbox with an isolated git config, repo/remote factories
 tests/fixtures/prompts.ts     answerInTurn() (inquirer's validation loop on the mocked input), anyValidate
+tests/types/                  test-only types: commands.ts (CapturedStream, TestContext), git.ts (Sandbox, RepoFixture)
 tests/commands/               crawl, ignore, acp and registry tests
 tests/utils/                  Cli, process runner and Conventional Commits tests
 ```
@@ -99,6 +103,7 @@ Rules for a command:
 
 - ESM, TypeScript strict with `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `verbatimModuleSyntax`, `erasableSyntaxOnly` (no enums, namespaces or parameter properties; `#private` fields are fine). Relative imports use the `.js` extension.
 - Type-only imports are separate `import type` statements. Exported functions in `src/` have explicit return types.
+- Every `type` alias and `interface`, exported or not, is declared under `src/types/`, one file per domain (no barrel `index.ts`); test-only types go in `tests/types/`. Type files hold declarations only and never derive a type from a value of the project (`typeof`, `keyof typeof`): declare a union and check the runtime constant with `satisfies`, as `styles` does with `Style`. The parseArgs token types are the one derivation, from `typeof parseArgs` of `node:util`, because `@types/node` does not export them. The tsconfig is intentional and is not aligned on the typescript-strict skill.
 - ESLint runs `strictTypeChecked` + `stylisticTypeChecked` on `src/` and `tests/`. In tests, mock async functions with `() => Promise.resolve()` / `() => Promise.reject(error)` rather than `async` arrows without `await` or empty bodies. Static-only classes are rejected (`no-extraneous-class`): use instances or plain functions.
 - Two tsconfigs: `tsconfig.json` (src + tests, `noEmit`, used by typecheck, the IDE and ESLint) and `tsconfig.build.json` (extends it, `rootDir: src`, `outDir: dist`, source maps). Compiler options live in `tsconfig.json`; only emit options go in the build config.
 - Tests use vitest with explicit imports from `vitest`. Test the dispatch through `main()` with `createContext()`; do not spawn the built CLI. A file that mocks a module (`vi.mock('@inquirer/prompts')`) calls `vi.clearAllMocks()` in `beforeEach`: `restoreMocks` does not reset their calls.

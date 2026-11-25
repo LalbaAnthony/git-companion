@@ -1,6 +1,11 @@
 import { confirm, input, select } from '@inquirer/prompts';
 import { CommandError, InterruptedError } from '../errors.js';
 import type { CommandContext } from '../types/command.js';
+import type {
+  PromptContext,
+  Style,
+  TextQuestionOptions,
+} from '../types/terminal.js';
 
 const reset = '\u001b[0m';
 const clearScreen = '\u001b[H\u001b[J';
@@ -14,27 +19,7 @@ export const styles = {
   error: '\u001b[91m',
   bold: '\u001b[1m',
   underline: '\u001b[4m',
-} as const;
-
-export type Style = keyof typeof styles;
-
-export interface TextQuestionOptions {
-  // Shown dimmed and returned when Enter is pressed on an empty input; Tab
-  // copies it into the input to edit it, and Backspace on an empty input
-  // discards it
-  readonly default?: string | undefined;
-  // An empty answer is refused and the question stays open
-  readonly required?: boolean;
-  // Error shown under the question, which stays open, or undefined when the
-  // answer is accepted
-  readonly validate?: ((answer: string) => string | undefined) | undefined;
-}
-
-interface PromptContext {
-  readonly input: NodeJS.ReadableStream;
-  readonly output: NodeJS.WritableStream;
-  readonly signal: AbortSignal;
-}
+} as const satisfies Record<Style, string>;
 
 // Errors thrown by @inquirer/prompts on Ctrl+C and on an aborted signal. They
 // are matched by name because they live in @inquirer/core, which is not a

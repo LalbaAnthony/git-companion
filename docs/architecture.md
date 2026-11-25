@@ -20,9 +20,15 @@ src/utils/repo.ts          Repo: a Git working copy driven through the git execu
 src/utils/message-command.ts  --message-command and --yes, shared by crawl and acp: validation, run, output
 src/utils/conventional-commit.ts  Conventional Commits check and --no-conventional, shared by crawl and acp
 src/utils/fs.ts            canonicalPath(), pathExists(), isDirectory(), isFile()
-src/types/command.ts       Command, option specs, CommandContext, ProcessRunner
-src/types/cli.ts           CliArguments
+src/types/command.ts       Command, option specs, CommandContext, ProcessRunner, ProcessRunnerOptions
+src/types/cli.ts           CliArguments, MainOptions, the parseArgs tokens (TokenizeConfig, Token, OptionToken)
+src/types/terminal.ts      Style, TextQuestionOptions, PromptContext of utils/cli.ts
+src/types/help.ts          HelpRow
+src/types/crawl.ts         the types of the crawl function
+tests/types/               the test-only types of the fixtures (commands.ts, git.ts)
 ```
+
+Every `type` alias and `interface` is declared under `src/types/`, one file per domain, and imported with `import type`; test-only types live in `tests/types/`. A type file holds no runtime code and does not derive a type from a value of the project: `Style` is a union that the `styles` constant `satisfies`. The parseArgs tokens are derived from `typeof parseArgs`, because `@types/node` does not export their types.
 
 ```
 cli.ts -> main.ts -> index.ts -> errors.ts

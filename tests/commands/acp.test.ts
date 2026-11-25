@@ -7,7 +7,7 @@ import { main } from '../../src/main.js';
 import type { CommandContext } from '../../src/types/command.js';
 import { createContext, writeNodeCommand } from '../fixtures/commands.js';
 import { createRepo, createSandbox, git, lastRemoteSubject } from '../fixtures/git.js';
-import type { RepoFixture, Sandbox } from '../fixtures/git.js';
+import type { RepoFixture, Sandbox } from '../types/git.js';
 import { answerInTurn, anyValidate } from '../fixtures/prompts.js';
 
 vi.mock('@inquirer/prompts', () => ({

@@ -2,6 +2,13 @@ import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { AlreadyReportedError, UsageError } from '../errors.js';
 import type { CommandContext, ProcessRunner } from '../types/command.js';
+import type {
+  CommitSettings,
+  FolderToCrawl,
+  Outcome,
+  PushReason,
+  RepoToPush,
+} from '../types/crawl.js';
 import { Cli } from '../utils/cli.js';
 import {
   checkMessageOption,
@@ -19,32 +26,6 @@ import { Repo } from '../utils/repo.js';
 import { defineCommand } from './define.js';
 
 const commandName = 'crawl';
-
-interface FolderToCrawl {
-  readonly path: string;
-  // 0: only the direct children of the folder are checked
-  readonly maxDepth: number;
-}
-
-type PushReason = 'uncommitted' | 'unpushed' | 'no-upstream';
-
-interface RepoToPush {
-  readonly repo: Repo;
-  readonly reason: PushReason;
-}
-
-type Outcome = 'synced' | 'skipped' | 'failed';
-
-interface CommitSettings {
-  readonly defaultMessage: string;
-  // Command line printing a suggested commit message; undefined without --message-command
-  readonly messageCommand: string | undefined;
-  // The message command whose output is committed without question; undefined
-  // without --yes
-  readonly acceptedCommand: string | undefined;
-  // Commit messages must follow Conventional Commits; false with --no-conventional
-  readonly conventional: boolean;
-}
 
 const skipAnswer = 'skip';
 

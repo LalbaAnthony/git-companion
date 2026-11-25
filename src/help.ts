@@ -1,11 +1,7 @@
 import type { Command, OptionSpec } from './types/command.js';
+import type { HelpRow } from './types/help.js';
 
 const programName = 'git-companion';
-
-interface HelpRow {
-  readonly label: string;
-  readonly description: string;
-}
 
 function formatRows(rows: readonly HelpRow[]): string[] {
   const width = Math.max(...rows.map((row) => row.label.length));
