@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/LalbaAnthony/git-companion/compare/v1.4.0...v1.5.0) (2026-11-25)
+
+
+### Features
+
+* **crawl,acp:** add --yes to commit the message command output without asking ([f95d0b6](https://github.com/LalbaAnthony/git-companion/commit/f95d0b6a3bbce9be4dafbdbffd8e7c3372aa6e16))
+
 # [1.4.0](https://github.com/LalbaAnthony/git-companion/compare/v1.3.0...v1.4.0) (2026-11-13)
 
 
